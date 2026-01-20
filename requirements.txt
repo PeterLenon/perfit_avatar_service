@@ -19,23 +19,18 @@ boto3>=1.34.0
 
 # Image processing
 opencv-python>=4.9.0
-mediapipe>=0.10.9
+mediapipe==0.10.9
 pillow>=10.2.0
 
-# ML core
-torch>=2.1.0
-torchvision>=0.16.0
-numpy>=1.26.0
+# ML core (NO torch here)
+numpy<2
 scipy>=1.10.0
 scikit-image>=0.21.0
 
 # SMPL body model
 smplx>=0.1.28
-# Note: chumpy removed - not needed for SMPL inference, has build issues
 
-# HMR2 / 4D-Humans dependencies
-# NOTE: detectron2 must be installed AFTER torch with:
-#   pip install "detectron2 @ git+https://github.com/facebookresearch/detectron2.git" --no-build-isolation
+# HMR2 / 4D-Humans deps
 pytorch-lightning>=2.0.0
 timm>=0.9.0
 einops>=0.7.0
@@ -43,7 +38,7 @@ yacs>=0.1.8
 PyYAML>=6.0
 pyrender>=0.1.45
 dill>=0.3.0
-pandas>=2.0.0
+pandas<2.2
 
 # Body measurements
 trimesh>=4.0.0
