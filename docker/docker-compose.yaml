@@ -1,0 +1,169 @@
+version: "3.9"
+
+services:
+  # =============================================================================
+  # Infrastructure Services
+  # =============================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: perfit-postgres
+    environment:
+      POSTGRES_USER: perfit
+      POSTGRES_PASSWORD: perfit_dev
+      POSTGRES_DB: perfit_avatars
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perfit -d perfit_avatars"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: perfit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: perfit-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO bucket initialization
+  minio-init:
+    image: minio/mc:latest
+    container_name: perfit-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin;
+        mc mb local/perfit-avatars --ignore-existing;
+        mc anonymous set download local/perfit-avatars;
+        echo 'Bucket initialized';
+      "
+
+  # =============================================================================
+  # Application Services
+  # =============================================================================
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: perfit-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: perfit
+      DB_PASSWORD: perfit_dev
+      DB_NAME: perfit_avatars
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # MinIO
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: perfit-avatars
+      MINIO_SECURE: "false"
+      # App settings
+      DEBUG: "true"
+      ENVIRONMENT: development
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8080"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ../app:/app/app:ro  # Mount for development hot-reload
+      - ../ml:/app/ml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    container_name: perfit-worker
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: perfit
+      DB_PASSWORD: perfit_dev
+      DB_NAME: perfit_avatars
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # MinIO
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: perfit-avatars
+      MINIO_SECURE: "false"
+      # ML settings
+      ML_PIXIE_DEVICE: cpu  # Use 'cuda' if GPU available
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ../app:/app/app:ro
+      - ../ml:/app/ml
+      - model_cache:/app/models  # Persistent model cache
+    # For GPU support, uncomment:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  model_cache:
+
+networks:
+  default:
+    name: perfit-network
