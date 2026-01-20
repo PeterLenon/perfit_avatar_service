@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # =============================================================================
   # Infrastructure Services
@@ -137,7 +135,8 @@ services:
       MINIO_BUCKET: perfit-avatars
       MINIO_SECURE: "false"
       # ML settings
-      ML_PIXIE_DEVICE: cpu  # Use 'cuda' if GPU available
+      ML_HMR2_DEVICE: cpu  # Use 'cuda' if GPU available
+      ML_SMPL_MODEL_PATH: /app/ml/smpl/models
     depends_on:
       postgres:
         condition: service_healthy

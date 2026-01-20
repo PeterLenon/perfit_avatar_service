@@ -21,8 +21,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir "detectron2 @ git+https://github.com/facebookresearch/detectron2.git" --no-build-isolation
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime
