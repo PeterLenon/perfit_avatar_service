@@ -30,9 +30,9 @@ RUN pip install --no-cache-dir \
     torchvision==0.17.2+cpu \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Install Detectron2 CPU wheel
-RUN pip install --no-cache-dir detectron2 \
-    -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.2/index.html
+# Build Detectron2 from source (CPU-only)
+RUN pip install --no-cache-dir \
+    'git+https://github.com/facebookresearch/detectron2.git@main'
 
 # Install remaining Python deps
 RUN pip install --no-cache-dir -r requirements.txt
