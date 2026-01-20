@@ -9,10 +9,12 @@ FROM python:3.10-bullseye as builder
 
 WORKDIR /build
 
-# Install build tools
+# Install build tools required for Detectron2 and other packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
+    cmake \
+    python3-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,8 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Upgrade pip & install base deps
-COPY requirements.txt .
+# Upgrade pip & wheel
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
 # Install CPU-only PyTorch
@@ -31,10 +32,10 @@ RUN pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cpu
 
 # Build Detectron2 from source (CPU-only)
-RUN pip install --no-cache-dir \
-    'git+https://github.com/facebookresearch/detectron2.git@main'
+RUN pip install --no-cache-dir 'git+https://github.com/facebookresearch/detectron2.git@main'
 
-# Install remaining Python deps
+# Install remaining Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # -----------------------------------------------------------------------------
@@ -44,7 +45,7 @@ FROM python:3.10-bullseye as runtime
 
 WORKDIR /app
 
-# Runtime dependencies for OpenCV / MediaPipe
+# Runtime deps for OpenCV / MediaPipe
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -54,7 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder
+# Copy venv from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
