@@ -1,67 +1,83 @@
 # =============================================================================
-# Perfit Avatar Service - RQ Worker
+# Perfit Avatar Service - RQ Worker (CPU-only)
 # =============================================================================
 # Handles background ML inference jobs (HMR2 body extraction)
 
 # -----------------------------------------------------------------------------
 # Stage 1: Builder
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Install build dependencies
+# System build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
+# Virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
+# Upgrade pip tooling
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir "detectron2 @ git+https://github.com/facebookresearch/detectron2.git" --no-build-isolation
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+
+# -------------------------------
+# CPU-only PyTorch
+# -------------------------------
+RUN pip install --no-cache-dir \
+    torch==2.2.2+cpu \
+    torchvision==0.17.2+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# -------------------------------
+# Detectron2 (CPU-only, from source)
+# -------------------------------
+RUN pip install --no-cache-dir --no-build-isolation \
+    'git+https://github.com/facebookresearch/detectron2.git@main'
+
+# Remaining Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim as runtime
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime dependencies
-# Note: More dependencies needed for ML inference
+# Runtime dependencies (OpenCV, MediaPipe, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder
+# Copy venv
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy application code
+# App code
 COPY app/ ./app/
 COPY ml/ ./ml/
 
-# Create directories for models and cache
+# Model + cache directories
 RUN mkdir -p /app/models /app/cache
 
-# Create non-root user
+# Non-root user
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Environment variables for PyTorch
+# Torch / HF caches
 ENV TORCH_HOME=/app/models
 ENV HF_HOME=/app/models/huggingface
 
-# Run RQ worker
-# --with-scheduler enables RQ scheduler for delayed jobs
+# RQ worker
 CMD ["rq", "worker", "avatar_extraction", "--url", "redis://redis:6379/0", "--with-scheduler"]
