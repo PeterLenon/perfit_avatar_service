@@ -68,7 +68,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender-dev \
     libegl1 \
     libgles2 \
-    libosmesa6 \
+    libosmesa6-dev \
+    libglvnd-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
