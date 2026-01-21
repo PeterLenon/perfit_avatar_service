@@ -87,13 +87,18 @@ RUN mkdir -p /app/models /app/cache
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 
-# Download HMR2/4D-Humans models (server blocks requests without User-Agent)
+# Download HMR2/4D-Humans models from Hugging Face (Berkeley server blocks downloads)
 # Models go to appuser's home .cache directory where hmr2 expects them
-RUN mkdir -p /home/appuser/.cache/4DHumans && \
-    curl -L -A "Mozilla/5.0" -o /home/appuser/.cache/4DHumans/hmr2_data.tar.gz \
-    "https://people.eecs.berkeley.edu/~jathushan/projects/4dhumans/hmr2_data.tar.gz" && \
-    tar -xzf /home/appuser/.cache/4DHumans/hmr2_data.tar.gz -C /home/appuser/.cache/4DHumans && \
-    rm /home/appuser/.cache/4DHumans/hmr2_data.tar.gz && \
+RUN mkdir -p /home/appuser/.cache/4DHumans/logs/train/multiruns/hmr2/0/checkpoints \
+             /home/appuser/.cache/4DHumans/data/smpl && \
+    curl -L -o /home/appuser/.cache/4DHumans/logs/train/multiruns/hmr2/0/checkpoints/epoch=35-step=1000000.ckpt \
+        "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/logs/train/multiruns/hmr2/0/checkpoints/epoch%3D35-step%3D1000000.ckpt" && \
+    curl -L -o /home/appuser/.cache/4DHumans/logs/train/multiruns/hmr2/0/model_config.yaml \
+        "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/logs/train/multiruns/hmr2/0/model_config.yaml" && \
+    curl -L -o /home/appuser/.cache/4DHumans/data/smpl/SMPL_NEUTRAL.pkl \
+        "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/data/smpl/SMPL_NEUTRAL.pkl" && \
+    curl -L -o /home/appuser/.cache/4DHumans/data/smpl_mean_params.npz \
+        "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/data/smpl_mean_params.npz" && \
     chown -R appuser:appuser /home/appuser/.cache
 
 USER appuser
