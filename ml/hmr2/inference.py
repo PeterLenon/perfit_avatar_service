@@ -73,6 +73,17 @@ class HMR2Inference:
         # Download models if needed (auto-downloads to ~/.cache/4DHumans/)
         download_models(CACHE_DIR_4DHUMANS)
 
+        # Patch MeshRenderer to skip pyrender initialization (not needed for inference)
+        # This avoids OSMesa/OpenGL issues in headless Docker containers
+        import hmr2.utils.mesh_renderer as mesh_renderer_module
+
+        class DummyMeshRenderer:
+            """No-op renderer for inference-only mode."""
+            def __init__(self, *args, **kwargs):
+                pass
+
+        mesh_renderer_module.MeshRenderer = DummyMeshRenderer
+
         # Load HMR2 model
         _hmr2_model, _hmr2_cfg = load_hmr2()
         _hmr2_model = _hmr2_model.to(self.device)
