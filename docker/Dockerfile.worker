@@ -99,6 +99,7 @@ RUN mkdir -p /home/appuser/.cache/4DHumans/logs/train/multiruns/hmr2/0/checkpoin
         "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/data/smpl/SMPL_NEUTRAL.pkl" && \
     curl -L -o /home/appuser/.cache/4DHumans/data/smpl_mean_params.npz \
         "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/data/smpl_mean_params.npz" && \
+    touch /home/appuser/.cache/4DHumans/hmr2_data.tar.gz && \
     chown -R appuser:appuser /home/appuser/.cache
 
 USER appuser
