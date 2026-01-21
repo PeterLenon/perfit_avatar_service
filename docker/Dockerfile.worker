@@ -83,9 +83,19 @@ COPY ml/ ./ml/
 # Model + cache directories
 RUN mkdir -p /app/models /app/cache
 
-# Non-root user
+# Non-root user (create before downloading so HOME is set correctly)
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
+
+# Download HMR2/4D-Humans models (server blocks requests without User-Agent)
+# Models go to appuser's home .cache directory where hmr2 expects them
+RUN mkdir -p /home/appuser/.cache/4DHumans && \
+    curl -L -A "Mozilla/5.0" -o /home/appuser/.cache/4DHumans/hmr2_data.tar.gz \
+    "https://people.eecs.berkeley.edu/~jathushan/projects/4dhumans/hmr2_data.tar.gz" && \
+    tar -xzf /home/appuser/.cache/4DHumans/hmr2_data.tar.gz -C /home/appuser/.cache/4DHumans && \
+    rm /home/appuser/.cache/4DHumans/hmr2_data.tar.gz && \
+    chown -R appuser:appuser /home/appuser/.cache
+
 USER appuser
 
 # Torch / HF caches
