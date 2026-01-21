@@ -117,10 +117,13 @@ async def create_avatar(
 
         rq_job = queue.enqueue(
             "app.workers.extraction_worker.extract_body_shape",
+            kwargs={
+                "job_id":job_id,
+                "user_id":request.user_id,
+                "image_base64":request.image_base64,
+                "gender":request.gender.value
+            },
             job_id=job_id,
-            user_id=request.user_id,
-            image_base64=request.image_base64,
-            gender=request.gender.value,
             job_timeout=settings.job_timeout_seconds,
         )
 
