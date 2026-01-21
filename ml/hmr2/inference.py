@@ -101,9 +101,10 @@ class HMR2Inference:
     def _load_detector(self) -> object:
         """Load the ViTDet person detector."""
         from detectron2.config import LazyConfig
+        from detectron2.config import instantiate
+        from detectron2.checkpoint import DetectionCheckpointer
 
         import hmr2
-        from hmr2.utils.utils_detectron2 import DefaultPredictor_Lazy
 
         cfg_path = Path(hmr2.__file__).parent / "configs" / "cascade_mask_rcnn_vitdet_h_75ep.py"
         detectron2_cfg = LazyConfig.load(str(cfg_path))
@@ -116,7 +117,24 @@ class HMR2Inference:
         for i in range(3):
             detectron2_cfg.model.roi_heads.box_predictors[i].test_score_thresh = 0.25
 
-        return DefaultPredictor_Lazy(detectron2_cfg)
+        # Custom predictor that respects CPU device (DefaultPredictor_Lazy hardcodes .cuda())
+        class CPUPredictor:
+            def __init__(self, cfg, device):
+                self.device = device
+                self.model = instantiate(cfg.model)
+                self.model.to(device)
+                self.model.eval()
+                DetectionCheckpointer(self.model).load(cfg.train.init_checkpoint)
+
+            def __call__(self, image):
+                import torch
+                with torch.no_grad():
+                    height, width = image.shape[:2]
+                    image_tensor = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
+                    inputs = {"image": image_tensor.to(self.device), "height": height, "width": width}
+                    return self.model([inputs])[0]
+
+        return CPUPredictor(detectron2_cfg, self.device)
 
     def predict(self, image: Image.Image, gender: str = "neutral") -> dict:
         """
