@@ -115,7 +115,7 @@ class Settings(BaseSettings):
 
     # Task queue
     rq_queue_name: str = "avatar_extraction"
-    job_timeout_seconds: int = 300  # 5 minutes max per job
+    job_timeout_seconds: int = 900  # 5 minutes max per job
 
     # Nested settings
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
