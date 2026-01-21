@@ -39,6 +39,12 @@ RUN pip install --no-cache-dir \
 RUN pip install --no-cache-dir --no-build-isolation \
     'git+https://github.com/facebookresearch/detectron2.git@main'
 
+# -------------------------------
+# 4D-Humans / HMR2 (from source)
+# -------------------------------
+RUN pip install --no-cache-dir \
+    'git+https://github.com/shubham-goel/4D-Humans.git'
+
 # Remaining Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
