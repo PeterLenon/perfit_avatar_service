@@ -42,6 +42,10 @@ RUN pip install --no-cache-dir --no-build-isolation \
 # -------------------------------
 # 4D-Humans / HMR2 (from source)
 # -------------------------------
+# Install chumpy first (has build issues with modern pip)
+RUN pip install --no-cache-dir --no-build-isolation \
+    'git+https://github.com/mattloper/chumpy.git'
+# Then install hmr2
 RUN pip install --no-cache-dir \
     'git+https://github.com/shubham-goel/4D-Humans.git'
 
