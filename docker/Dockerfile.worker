@@ -105,6 +105,15 @@ RUN mkdir -p /home/appuser/.cache/4DHumans/logs/train/multiruns/hmr2/0/checkpoin
     touch /home/appuser/.cache/4DHumans/hmr2_data.tar.gz && \
     chown -R appuser:appuser /home/appuser/.cache
 
+# Create SMPL model structure for smplx library (expects /models/smpl/SMPL_*.pkl)
+RUN mkdir -p /app/ml/smpl/models/smpl && \
+    curl -L -o /app/ml/smpl/models/smpl/SMPL_NEUTRAL.pkl \
+        "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/data/smpl/SMPL_NEUTRAL.pkl" && \
+    curl -L -o /app/ml/smpl/models/smpl/SMPL_MALE.pkl \
+        "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/data/smpl/SMPL_MALE.pkl" && \
+    curl -L -o /app/ml/smpl/models/smpl/SMPL_FEMALE.pkl \
+        "https://huggingface.co/camenduru/4D-Humans/resolve/main/HMR2/data/smpl/SMPL_FEMALE.pkl"
+
 USER appuser
 
 # Torch / HF caches
