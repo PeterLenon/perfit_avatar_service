@@ -136,7 +136,7 @@ services:
       MINIO_SECURE: "false"
       # ML settings
       ML_HMR2_DEVICE: cpu  # Use 'cuda' if GPU available
-      ML_SMPL_MODEL_PATH: /app/ml/smpl/models
+      ML_SMPL_MODEL_PATH: /app/models  # Models stored here to avoid volume mount conflicts
     depends_on:
       postgres:
         condition: service_healthy
