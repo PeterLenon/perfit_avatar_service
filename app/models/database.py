@@ -71,6 +71,7 @@ class Avatar(Base):
     # Storage URLs
     smplx_params_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mesh_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    animated_glb_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     source_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Metadata

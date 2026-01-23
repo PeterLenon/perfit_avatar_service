@@ -63,6 +63,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy app code
 COPY app/ ./app/
 COPY ml/ ./ml/
+# Copy Alembic files for migrations
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
 
 # Non-root user
 RUN useradd --create-home --shell /bin/bash appuser && \

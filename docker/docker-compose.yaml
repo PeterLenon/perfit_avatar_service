@@ -107,6 +107,8 @@ services:
     volumes:
       - ../app:/app/app:ro  # Mount for development hot-reload
       - ../ml:/app/ml:ro
+      - ../alembic.ini:/app/alembic.ini:ro
+      - ../alembic:/app/alembic  # Writable for migration files
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live"]
       interval: 10s

@@ -14,7 +14,8 @@ import base64
 import io
 import uuid
 from datetime import datetime
-
+import numpy as np
+import json
 from loguru import logger
 from PIL import Image
 from sqlalchemy import select
@@ -151,6 +152,27 @@ def extract_body_shape(
                 faces=hmr2.smpl_faces,
             )
 
+            # Generate and upload animated GLB
+            logger.info("Generating animated GLB with multiple poses...")
+            from app.services.animation import AnimationService
+
+            animation_service = AnimationService(
+                smpl_model_path=settings.ml.smpl_model_path,
+                gender=gender,
+            )
+            poses = animation_service.generate_poses(
+                betas=smpl_output["betas"],
+                base_body_pose=smpl_output["body_pose"],
+                base_global_orient=smpl_output["global_orient"],
+            )
+            glb_data = animation_service.create_animated_glb(poses, output_path=None)
+            animated_glb_url = storage.upload_animated_glb(
+                user_id=user_id,
+                avatar_id=str(avatar_id),
+                glb_data=glb_data,
+            )
+            logger.info(f"Animated GLB uploaded")
+
             # Upload source image
             # Determine content type from image format
             content_type = f"image/{image.format.lower()}" if image.format else "image/jpeg"
@@ -184,6 +206,7 @@ def extract_body_shape(
                 neck_circumference_cm=measurements["neck_circumference_cm"],
                 smplx_params_url=smplx_params_url,
                 mesh_url=mesh_url,
+                animated_glb_url=animated_glb_url,
                 source_image_url=source_image_url,
             )
             db.add(avatar)

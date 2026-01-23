@@ -270,6 +270,7 @@ async def get_avatar(
         ),
         smplx_params_url=avatar.smplx_params_url,
         mesh_url=avatar.mesh_url,
+        animated_glb_url=avatar.animated_glb_url,
         created_at=avatar.created_at,
         gender=avatar.gender,
     )
@@ -315,6 +316,7 @@ async def get_avatar_history(
             ),
             smplx_params_url=avatar.smplx_params_url,
             mesh_url=avatar.mesh_url,
+            animated_glb_url=avatar.animated_glb_url,
             created_at=avatar.created_at,
             gender=avatar.gender,
         )
