@@ -26,7 +26,6 @@ from pygltflib import (
     Node,
     Primitive,
     Scene,
-    Target,
 )
 
 from app.config import get_settings
@@ -463,10 +462,10 @@ class AnimationService:
                     channels=[
                         AnimationChannel(
                             sampler=0,
-                            target=Target(
-                                node=0,
-                                path="weights",
-                            ),
+                            target={
+                                "node": 0,
+                                "path": "weights",
+                            },
                         )
                     ],
                 )
