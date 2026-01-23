@@ -171,7 +171,7 @@ def extract_body_shape(
                 avatar_id=str(avatar_id),
                 glb_data=glb_data,
             )
-            logger.info(f"Animated GLB uploaded: {animated_glb_url}")
+            logger.info(f"Animated GLB uploaded")
 
             # Upload source image
             # Determine content type from image format

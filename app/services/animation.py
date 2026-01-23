@@ -335,12 +335,14 @@ class AnimationService:
                     buffer=0,
                     byteOffset=vertex_buffer_view_start,
                     byteLength=vertex_buffer_view_length,
+                    target=34962,  # ARRAY_BUFFER for vertex data
                 ),
                 # Indices
                 BufferView(
                     buffer=0,
                     byteOffset=index_buffer_view_start,
                     byteLength=index_buffer_view_length,
+                    target=34963,  # ELEMENT_ARRAY_BUFFER for index data
                 ),
                 # Morph targets
                 *[
@@ -348,6 +350,7 @@ class AnimationService:
                         buffer=0,
                         byteOffset=morph["start"],
                         byteLength=morph["length"],
+                        target=34962,  # ARRAY_BUFFER for vertex data
                     )
                     for morph in morph_buffer_views
                 ],
@@ -432,7 +435,7 @@ class AnimationService:
                 Accessor(
                     bufferView=len(gltf.bufferViews) + 1,
                     componentType=5126,  # FLOAT
-                    count=len(weights),
+                    count=len(weights.flatten()),  # Total number of weight values (frames * morph_targets)
                     type="SCALAR",
                 ),
             ])
