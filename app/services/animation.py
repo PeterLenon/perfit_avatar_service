@@ -495,7 +495,9 @@ class AnimationService:
             
             # Load and convert to GLB with embedded binary
             gltf_loaded = GLTF2.load(tmp_gltf)
-            gltf_loaded.convert_buffers(glb=True)
+            # Convert buffers to GLB binary format (embedded)
+            # convert_buffers() converts data URI buffers to binary buffers for GLB
+            gltf_loaded.convert_buffers()
             gltf_loaded.save_binary(tmp_glb)
             
             # Clean up temporary GLTF file
