@@ -9,6 +9,7 @@ Creates multiple poses that simulate a person trying on clothes:
 - Turning slightly
 """
 
+import base64
 import numpy as np
 import torch
 from loguru import logger
@@ -472,27 +473,50 @@ class AnimationService:
             ]
 
         # Update buffer size
-        gltf.buffers[0].byteLength = len(binary_data)
-
-        # Save GLB file
+        buffer_data = bytes(binary_data)
+        gltf.buffers[0].byteLength = len(buffer_data)
+        
+        # Set buffer data as data URI, then convert to GLB binary
+        # pygltflib needs buffer data to be accessible when converting
+        gltf.buffers[0].uri = f"data:application/octet-stream;base64,{base64.b64encode(buffer_data).decode()}"
+        
+        # Save to temporary GLTF file first, then convert to GLB
         if output_path:
-            gltf.save_binary(output_path, binary_data)
-            logger.info(f"Created animated GLB file: {output_path} with {len(poses)} poses")
-            # Read it back to return bytes
-            with open(output_path, "rb") as f:
-                return f.read()
+            tmp_gltf = output_path.replace('.glb', '.gltf')
+            tmp_glb = output_path
         else:
-            # Save to temporary file first, then read
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".glb") as tmp:
-                tmp_path = tmp.name
-            try:
-                gltf.save_binary(tmp_path, binary_data)
-                with open(tmp_path, "rb") as f:
-                    glb_data = f.read()
-                os.unlink(tmp_path)
-                logger.info(f"Created animated GLB in memory with {len(poses)} poses")
-                return glb_data
-            except Exception as e:
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
-                raise
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".gltf") as tmp:
+                tmp_gltf = tmp.name
+            tmp_glb = tmp_gltf.replace('.gltf', '.glb')
+        
+        try:
+            # Save as GLTF with data URI buffer
+            gltf.save(tmp_gltf)
+            
+            # Load and convert to GLB with embedded binary
+            gltf_loaded = GLTF2.load(tmp_gltf)
+            gltf_loaded.convert_buffers(glb=True)
+            gltf_loaded.save_binary(tmp_glb)
+            
+            # Clean up temporary GLTF file
+            if os.path.exists(tmp_gltf):
+                os.unlink(tmp_gltf)
+            
+            # Read and return GLB data
+            with open(tmp_glb, "rb") as f:
+                glb_data = f.read()
+            
+            if not output_path:
+                # Clean up temporary GLB file if we created it
+                os.unlink(tmp_glb)
+            
+            logger.info(f"Created animated GLB with {len(poses)} poses")
+            return glb_data
+            
+        except Exception as e:
+            # Clean up on error
+            if os.path.exists(tmp_gltf):
+                os.unlink(tmp_gltf)
+            if not output_path and os.path.exists(tmp_glb):
+                os.unlink(tmp_glb)
+            raise
