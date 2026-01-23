@@ -210,3 +210,78 @@ class ImageValidationResult(BaseModel):
     image_height: int | None = None
     face_detected: bool = False
     face_confidence: float | None = None
+
+
+# =============================================================================
+# Virtual Fitting Room Schemas
+# =============================================================================
+
+
+class GarmentType(str, Enum):
+    """Types of garments."""
+
+    SHIRT = "shirt"
+    PANTS = "pants"
+    DRESS = "dress"
+    JACKET = "jacket"
+    COAT = "coat"
+    SWEATER = "sweater"
+    T_SHIRT = "t-shirt"
+    SHORTS = "shorts"
+    SKIRT = "skirt"
+    SHOES = "shoes"
+    BOOTS = "boots"
+    SOCKS = "socks"
+    UNDERWEAR = "underwear"
+    UNDERSHIRT = "undershirt"
+    HAT = "hat"
+    BELT = "belt"
+
+
+class GarmentCreateRequest(BaseModel):
+    """Request to create a garment from a photo."""
+
+    user_id: str = Field(..., min_length=1, max_length=100)
+    image_base64: str = Field(..., min_length=100)
+    garment_type: GarmentType | None = Field(None, description="Optional hint for garment type")
+    name: str | None = Field(None, max_length=200, description="Optional name for the garment")
+
+
+class GarmentResponse(BaseModel):
+    """Garment information."""
+
+    garment_id: str
+    user_id: str
+    name: str | None
+    garment_type: str
+    status: str
+    source_image_url: str | None
+    segmented_image_url: str | None
+    garment_mesh_url: str | None
+    texture_url: str | None
+    material_properties: dict[str, Any] | None
+    key_points: dict[str, Any] | None
+    created_at: datetime
+
+
+class TryOnRequest(BaseModel):
+    """Request to try on garment(s) on an avatar."""
+
+    avatar_id: str = Field(..., description="Avatar to try clothes on")
+    garment_ids: list[str] = Field(..., min_length=1, description="List of garment IDs to try on")
+    cache_result: bool = Field(
+        True,
+        description="Whether to cache the fitted result for future use",
+    )
+
+
+class FittedGarmentResponse(BaseModel):
+    """Response for a fitted garment/outfit."""
+
+    fitted_id: str
+    avatar_id: str
+    garment_ids: list[str]
+    fitted_mesh_url: str | None
+    animated_glb_url: str | None
+    layering_order: list[str]
+    created_at: datetime

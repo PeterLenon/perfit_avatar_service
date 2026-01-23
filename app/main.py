@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.api.routes import avatar, health
+from app.api.routes import avatar, fitting_room, garments, health
 from app.config import get_settings
 from app.models.database import close_db, init_db
 
@@ -80,6 +80,16 @@ def create_app() -> FastAPI:
         avatar.router,
         prefix=settings.api_prefix,
         tags=["Avatar"],
+    )
+    app.include_router(
+        garments.router,
+        prefix=settings.api_prefix,
+        tags=["Garments"],
+    )
+    app.include_router(
+        fitting_room.router,
+        prefix=settings.api_prefix,
+        tags=["Virtual Fitting Room"],
     )
 
     return app
