@@ -156,6 +156,184 @@ class ExtractionJob(Base):
         return f"<ExtractionJob(id={self.id}, status={self.status})>"
 
 
+class Garment(Base):
+    """
+    Represents a clothing item extracted from a photo.
+
+    Stores garment information including type, mesh, texture, and material properties.
+    """
+
+    __tablename__ = "garments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(100),
+        index=True,
+        nullable=False,
+    )
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    garment_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )  # shirt, pants, dress, jacket, etc.
+
+    # Storage URLs
+    source_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    segmented_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    garment_mesh_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    texture_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Material properties (JSON)
+    material_properties: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Example: {"stretch": 0.5, "bend": 0.3, "shear": 0.4, "density": 0.1}
+
+    # Key points (JSON) - for garment fitting
+    key_points: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Example: {"collar": [x, y], "sleeves": [[x1, y1], [x2, y2]], ...}
+
+    # Processing status
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="pending",
+        index=True,
+    )  # pending, processing, completed, failed
+
+    # Error tracking
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Job tracking timestamps
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Metadata
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<Garment(id={self.id}, user_id={self.user_id}, type={self.garment_type})>"
+
+
+class FittedGarment(Base):
+    """
+    Represents a fitted outfit (avatar with one or more garments).
+
+    Supports multiple garments per fitting (complete outfits).
+    """
+
+    __tablename__ = "fitted_garments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    avatar_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    
+    # Multiple garments stored as JSON array
+    garment_ids: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+    )  # Array of garment UUIDs: ["garment_id1", "garment_id2", ...]
+
+    # Storage URLs
+    fitted_mesh_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    animated_glb_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Fitting parameters (JSON)
+    fitting_parameters: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Example: {
+    #   "layering_order": ["underwear", "shirt", "pants", "shoes"],
+    #   "attachment_points": {...},
+    #   "draping_parameters": {...}
+    # }
+
+    # Metadata
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<FittedGarment(id={self.id}, avatar_id={self.avatar_id}, garments={len(self.garment_ids)})>"
+
+
+class Outfit(Base):
+    """
+    Represents a saved outfit (collection of garments).
+
+    Users can save complete outfits for quick try-on later.
+    """
+
+    __tablename__ = "outfits"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(100),
+        index=True,
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Garment IDs in this outfit
+    garment_ids: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+    )  # Array of garment UUIDs
+
+    # Metadata
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<Outfit(id={self.id}, user_id={self.user_id}, name={self.name})>"
+
+
 # =============================================================================
 # Database Connection Management
 # =============================================================================

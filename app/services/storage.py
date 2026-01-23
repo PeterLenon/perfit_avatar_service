@@ -153,6 +153,43 @@ class StorageService:
             logger.error(f"Failed to upload animated GLB: {e}")
             raise
 
+    def upload_image(
+        self,
+        user_id: str,
+        item_id: str,
+        image_data: bytes,
+        content_type: str = "image/jpeg",
+        path_suffix: str = "source",
+    ) -> str:
+        """
+        Upload an image file (generic method).
+
+        Args:
+            user_id: User identifier
+            item_id: Item identifier (avatar_id, garment_id, etc.)
+            image_data: Raw image bytes
+            content_type: MIME type of the image
+            path_suffix: Suffix for the storage path (source, segmented, texture, etc.)
+
+        Returns:
+            URL to the uploaded file
+        """
+        extension = content_type.split("/")[-1]
+        key = f"avatars/{user_id}/{item_id}/{path_suffix}.{extension}"
+
+        try:
+            self.client.put_object(
+                Bucket=self.settings.bucket,
+                Key=key,
+                Body=image_data,
+                ContentType=content_type,
+            )
+            logger.info(f"Uploaded image to {key}")
+            return self._get_url(key)
+        except ClientError as e:
+            logger.error(f"Failed to upload image: {e}")
+            raise
+
     def upload_source_image(
         self,
         user_id: str,
@@ -208,6 +245,62 @@ class StorageService:
         except ClientError as e:
             logger.error(f"Failed to download SMPL-X params: {e}")
             raise
+
+    def download_mesh(self, url: str) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Download and parse OBJ mesh file.
+
+        Args:
+            url: URL to the .obj file
+
+        Returns:
+            Tuple of (vertices, faces) as numpy arrays
+        """
+        key = self._url_to_key(url)
+
+        try:
+            response = self.client.get_object(Bucket=self.settings.bucket, Key=key)
+            obj_content = response["Body"].read().decode("utf-8")
+            
+            vertices = []
+            faces = []
+            
+            for line in obj_content.split("\n"):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                
+                parts = line.split()
+                if not parts:
+                    continue
+                
+                if parts[0] == "v":
+                    # Vertex: v x y z
+                    vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                elif parts[0] == "f":
+                    # Face: f v1 v2 v3 (OBJ uses 1-indexed, convert to 0-indexed)
+                    face_verts = []
+                    for part in parts[1:]:
+                        # Handle format: f v1/vt1/vn1 v2/vt2/vn2 v3/vt3/vn3
+                        # or just: f v1 v2 v3
+                        vertex_idx = int(part.split("/")[0]) - 1  # Convert to 0-indexed
+                        face_verts.append(vertex_idx)
+                    if len(face_verts) >= 3:
+                        # Handle polygons by triangulating (simple: first 3 vertices)
+                        faces.append(face_verts[:3])
+            
+            vertices_array = np.array(vertices, dtype=np.float32)
+            faces_array = np.array(faces, dtype=np.uint32)
+            
+            logger.info(f"Loaded mesh: {len(vertices_array)} vertices, {len(faces_array)} faces")
+            return vertices_array, faces_array
+            
+        except ClientError as e:
+            logger.error(f"Failed to download mesh: {e}")
+            raise
+        except (ValueError, IndexError) as e:
+            logger.error(f"Failed to parse OBJ file: {e}")
+            raise ValueError(f"Invalid OBJ file format: {e}")
 
     def generate_presigned_url(self, key: str, expiration: int = 3600) -> str:
         """
