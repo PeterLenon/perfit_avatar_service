@@ -44,6 +44,9 @@ pandas<2.2
 # Body measurements
 trimesh>=4.0.0
 
+# 3D file formats
+pygltflib>=1.15.0
+
 # Utilities
 loguru>=0.7.0
 httpx>=0.26.0

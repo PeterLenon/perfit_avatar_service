@@ -150,6 +150,10 @@ class AvatarResponse(BaseModel):
         None,
         description="URL to download body mesh (OBJ format)",
     )
+    animated_glb_url: str | None = Field(
+        None,
+        description="URL to download animated GLB file (browser-viewable 3D model with poses)",
+    )
     created_at: datetime
     gender: Gender
 

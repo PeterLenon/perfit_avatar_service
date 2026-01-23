@@ -121,6 +121,38 @@ class StorageService:
             logger.error(f"Failed to upload mesh: {e}")
             raise
 
+    def upload_animated_glb(
+        self,
+        user_id: str,
+        avatar_id: str,
+        glb_data: bytes,
+    ) -> str:
+        """
+        Upload animated GLB file.
+
+        Args:
+            user_id: User identifier
+            avatar_id: Avatar identifier
+            glb_data: Binary GLB file data
+
+        Returns:
+            URL to the uploaded file
+        """
+        key = f"avatars/{user_id}/{avatar_id}/avatar.glb"
+
+        try:
+            self.client.put_object(
+                Bucket=self.settings.bucket,
+                Key=key,
+                Body=glb_data,
+                ContentType="model/gltf-binary",
+            )
+            logger.info(f"Uploaded animated GLB to {key}")
+            return self._get_url(key)
+        except ClientError as e:
+            logger.error(f"Failed to upload animated GLB: {e}")
+            raise
+
     def upload_source_image(
         self,
         user_id: str,
