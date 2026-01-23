@@ -26,7 +26,7 @@ from pygltflib import (
     Mesh,
     Node,
     Primitive,
-    Scene,
+    Scene, BufferFormat,
 )
 
 from app.config import get_settings
@@ -492,12 +492,8 @@ class AnimationService:
         try:
             # Save as GLTF with data URI buffer
             gltf.save(tmp_gltf)
-            
-            # Load and convert to GLB with embedded binary
             gltf_loaded = GLTF2.load(tmp_gltf)
-            # Convert buffers to GLB binary format (embedded)
-            # convert_buffers() converts data URI buffers to binary buffers for GLB
-            gltf_loaded.convert_buffers()
+            gltf_loaded.convert_buffers(buffer_format=BufferFormat.DATAURI)
             gltf_loaded.save_binary(tmp_glb)
             
             # Clean up temporary GLTF file
