@@ -134,6 +134,7 @@ def fit_garments_to_avatar(
                 avatar_id=fitting_id,
                 vertices=fitting_result["combined_vertices"],
                 faces=fitting_result["combined_faces"],
+                storage_type="fittings",
             )
 
             # Generate animated GLB with fitted mesh
@@ -184,6 +185,8 @@ def fit_garments_to_avatar(
                     user_id=avatar.user_id,
                     avatar_id=fitting_id,
                     glb_data=glb_data,
+                    storage_type="fittings",
+                    filename="fitted.glb",
                 )
                 logger.info(f"Animated GLB generated and uploaded: {animated_glb_url}")
                 

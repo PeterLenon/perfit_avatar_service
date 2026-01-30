@@ -50,6 +50,7 @@ class StorageService:
         user_id: str,
         avatar_id: str,
         params: dict[str, Any],
+        storage_type: str = "avatars",
     ) -> str:
         """
         Upload SMPL-X parameters as a compressed numpy archive.
@@ -59,11 +60,12 @@ class StorageService:
             avatar_id: Avatar identifier
             params: Dictionary containing SMPL-X parameters
                    (betas, body_pose, global_orient, etc.)
+            storage_type: Top-level folder (avatars, garments, fittings)
 
         Returns:
             URL to the uploaded file
         """
-        key = f"avatars/{user_id}/{avatar_id}/smplx_params.npz"
+        key = f"{storage_type}/{user_id}/{avatar_id}/smplx_params.npz"
 
         # Convert lists to numpy arrays and save to buffer
         buffer = io.BytesIO()
@@ -90,6 +92,7 @@ class StorageService:
         avatar_id: str,
         vertices: np.ndarray,
         faces: np.ndarray,
+        storage_type: str = "avatars",
     ) -> str:
         """
         Upload body mesh as an OBJ file.
@@ -99,11 +102,12 @@ class StorageService:
             avatar_id: Avatar identifier
             vertices: Nx3 array of vertex positions
             faces: Mx3 array of face indices
+            storage_type: Top-level folder (avatars, garments, fittings)
 
         Returns:
             URL to the uploaded file
         """
-        key = f"avatars/{user_id}/{avatar_id}/mesh.obj"
+        key = f"{storage_type}/{user_id}/{avatar_id}/mesh.obj"
 
         # Generate OBJ content
         obj_content = self._generate_obj(vertices, faces)
@@ -126,6 +130,8 @@ class StorageService:
         user_id: str,
         avatar_id: str,
         glb_data: bytes,
+        storage_type: str = "avatars",
+        filename: str = "avatar.glb",
     ) -> str:
         """
         Upload animated GLB file.
@@ -134,11 +140,13 @@ class StorageService:
             user_id: User identifier
             avatar_id: Avatar identifier
             glb_data: Binary GLB file data
+            storage_type: Top-level folder (avatars, garments, fittings)
+            filename: Name of the GLB file
 
         Returns:
             URL to the uploaded file
         """
-        key = f"avatars/{user_id}/{avatar_id}/avatar.glb"
+        key = f"{storage_type}/{user_id}/{avatar_id}/{filename}"
 
         try:
             self.client.put_object(
@@ -160,6 +168,7 @@ class StorageService:
         image_data: bytes,
         content_type: str = "image/jpeg",
         path_suffix: str = "source",
+        storage_type: str = "avatars",
     ) -> str:
         """
         Upload an image file (generic method).
@@ -170,12 +179,13 @@ class StorageService:
             image_data: Raw image bytes
             content_type: MIME type of the image
             path_suffix: Suffix for the storage path (source, segmented, texture, etc.)
+            storage_type: Top-level folder (avatars, garments, fittings)
 
         Returns:
             URL to the uploaded file
         """
         extension = content_type.split("/")[-1]
-        key = f"avatars/{user_id}/{item_id}/{path_suffix}.{extension}"
+        key = f"{storage_type}/{user_id}/{item_id}/{path_suffix}.{extension}"
 
         try:
             self.client.put_object(
@@ -196,6 +206,7 @@ class StorageService:
         avatar_id: str,
         image_data: bytes,
         content_type: str = "image/jpeg",
+        storage_type: str = "avatars",
     ) -> str:
         """
         Upload the source image used for avatar creation.
@@ -205,12 +216,13 @@ class StorageService:
             avatar_id: Avatar identifier
             image_data: Raw image bytes
             content_type: MIME type of the image
+            storage_type: Top-level folder (avatars, garments, fittings)
 
         Returns:
             URL to the uploaded file
         """
         extension = content_type.split("/")[-1]
-        key = f"avatars/{user_id}/{avatar_id}/source.{extension}"
+        key = f"{storage_type}/{user_id}/{avatar_id}/source.{extension}"
 
         try:
             self.client.put_object(

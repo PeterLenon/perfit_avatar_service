@@ -122,6 +122,7 @@ def process_garment(
                 image_data=image_data,
                 content_type=content_type,
                 path_suffix="source",
+                storage_type="garments",
             )
 
             # Upload segmented image
@@ -134,6 +135,7 @@ def process_garment(
                 image_data=segmented_buffer.getvalue(),
                 content_type="image/png",
                 path_suffix="segmented",
+                storage_type="garments",
             )
 
             # Upload garment mesh
@@ -142,6 +144,7 @@ def process_garment(
                 avatar_id=garment_id,
                 vertices=reconstruction_result["vertices"],
                 faces=reconstruction_result["faces"],
+                storage_type="garments",
             )
 
             # Upload texture
@@ -153,6 +156,7 @@ def process_garment(
                 image_data=texture_buffer.getvalue(),
                 content_type="image/png",
                 path_suffix="texture",
+                storage_type="garments",
             )
 
             logger.info("Storage upload complete")
