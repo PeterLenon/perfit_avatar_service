@@ -7,6 +7,8 @@ Reconstructs 3D garment meshes from 2D images:
 - UV mapping
 """
 
+from typing import Any
+
 import numpy as np
 from loguru import logger
 from PIL import Image
