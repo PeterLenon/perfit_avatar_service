@@ -126,4 +126,4 @@ ENV HF_HOME=/app/models/huggingface
 ENV PYOPENGL_PLATFORM=osmesa
 
 # RQ worker
-CMD ["rq", "worker", "avatar_extraction", "--url", "redis://redis:6379/0", "--with-scheduler"]
+CMD ["rq", "worker", "avatar_extraction", "garment_processing", "garment_fitting", "--url", "redis://redis:6379/0", "--with-scheduler"]
