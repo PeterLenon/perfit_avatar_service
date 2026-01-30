@@ -16,7 +16,7 @@ class DatabaseSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="DB_")
 
-    host: str = "localhost"
+    host: str = "perfit-postgres"
     port: int = 5432
     user: str = "perfit"
     password: str = "perfit_dev"
@@ -38,7 +38,7 @@ class RedisSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="REDIS_")
 
-    host: str = "localhost"
+    host: str = "perfit-redis"
     port: int = 6379
     db: int = 0
     password: str | None = None

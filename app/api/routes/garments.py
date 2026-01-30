@@ -71,9 +71,9 @@ async def create_garment(
     settings = get_settings()
     validator = ImageValidator(settings.image_validation)
 
-    # Validate the image
+    # Validate the image (no face detection required for garments)
     logger.info(f"Validating garment image for user {request.user_id}")
-    validation_result = validator.validate_base64(request.image_base64)
+    validation_result = validator.validate_base64(request.image_base64, require_face=False)
 
     if not validation_result.is_valid:
         logger.warning(f"Image validation failed: {validation_result.errors}")
