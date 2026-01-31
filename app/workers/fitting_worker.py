@@ -78,6 +78,15 @@ def fit_garments_to_avatar(
                 select(Avatar).where(Avatar.id == uuid.UUID(avatar_id))
             ).scalar_one()
 
+            # Get avatar's skin color (or use default)
+            skin_color = None
+            if avatar.skin_color and "rgb" in avatar.skin_color:
+                skin_color = avatar.skin_color["rgb"]
+                logger.info(f"Using avatar skin color: RGB({skin_color[0]:.2f}, {skin_color[1]:.2f}, {skin_color[2]:.2f})")
+            else:
+                skin_color = [0.87, 0.72, 0.58]  # Default medium
+                logger.info("Avatar has no stored skin color, using default medium")
+
             # Load garments
             garment_uuids = [uuid.UUID(gid) for gid in garment_ids]
             garments = db.execute(
@@ -157,37 +166,16 @@ def fit_garments_to_avatar(
             # Create multiple views/poses of the fitted avatar with clothes
             animated_glb_url = None
             try:
-                # Create poses by rotating the fitted mesh (simpler than re-fitting for each pose)
-                # This shows the avatar with clothes from different angles
                 combined_vertices = fitting_result["combined_vertices"]
                 combined_faces = fitting_result["combined_faces"]
-                
-                # Generate poses with rotations (showing fitted avatar from different angles)
-                poses = []
-                
-                # Center the mesh for rotation
-                center = combined_vertices.mean(axis=0)
-                centered_vertices = combined_vertices - center
-                
-                # Create poses with different rotations
-                rotation_angles = [0, 45, 90, 135, 180, 225, 270, 315]  # 8 views around Y-axis
-                
-                for angle in rotation_angles:
-                    # Rotate around Y-axis
-                    angle_rad = np.radians(angle)
-                    rotation_matrix = np.array([
-                        [np.cos(angle_rad), 0, np.sin(angle_rad)],
-                        [0, 1, 0],
-                        [-np.sin(angle_rad), 0, np.cos(angle_rad)],
-                    ])
-                    
-                    rotated_vertices = (centered_vertices @ rotation_matrix.T) + center
-                    
-                    poses.append({
-                        "name": f"View {angle}°",
-                        "vertices": rotated_vertices,
-                        "faces": combined_faces,
-                    })
+
+                # Generate poses - just use the fitted mesh directly without rotation
+                # Rotation causes issues with coordinate systems
+                poses = [{
+                    "name": "Fitted",
+                    "vertices": combined_vertices,
+                    "faces": combined_faces,
+                }]
                 
                 # Use animation service to create GLB
                 animation_service = AnimationService(
@@ -196,7 +184,7 @@ def fit_garments_to_avatar(
                 )
                 
                 glb_data = animation_service.create_animated_glb(
-                    poses, output_path=None, body_color="medium"
+                    poses, output_path=None, body_color=skin_color
                 )
                 
                 animated_glb_url = storage.upload_animated_glb(

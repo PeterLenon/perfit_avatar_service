@@ -68,6 +68,10 @@ class Avatar(Base):
     thigh_circumference_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     neck_circumference_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Appearance
+    # Skin color extracted from source image as [R, G, B] in 0-1 range
+    skin_color: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     # Storage URLs
     smplx_params_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mesh_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -191,6 +195,9 @@ class Garment(Base):
     # Material properties (JSON)
     material_properties: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Example: {"stretch": 0.5, "bend": 0.3, "shear": 0.4, "density": 0.1}
+
+    # Dominant color extracted from garment as [R, G, B] in 0-1 range
+    dominant_color: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Key points (JSON) - for garment fitting
     key_points: Mapped[dict | None] = mapped_column(JSON, nullable=True)

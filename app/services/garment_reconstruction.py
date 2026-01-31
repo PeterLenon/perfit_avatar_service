@@ -107,17 +107,22 @@ class GarmentReconstructionService:
 
             # Create a cylindrical mesh (simplified shirt shape)
             # Generate vertices in a cylindrical pattern
+            # Use SMPL-compatible coordinates: Y-up, centered at origin
             num_rings = 8  # Vertical rings
             num_points_per_ring = 16  # Points around the cylinder
-            
+
+            # Scale to approximate SMPL body dimensions (meters)
+            body_scale = 0.5  # Upper torso is roughly 0.5m tall
+
             vertices = []
             for ring in range(num_rings):
-                y = -height_estimate * (ring / (num_rings - 1))  # From top to bottom
-                radius = width_estimate * 0.3 * (1 - 0.1 * (ring / num_rings))  # Taper slightly
+                # Y goes from top (positive) to bottom (less positive) - Y-up convention
+                y = body_scale * (1.0 - ring / (num_rings - 1))  # From top to bottom
+                radius = width_estimate * 0.25 * (1 - 0.1 * (ring / num_rings))  # Taper slightly
                 for point in range(num_points_per_ring):
                     angle = 2 * np.pi * point / num_points_per_ring
                     x = radius * np.cos(angle)
-                    z = radius * np.sin(angle) * 0.3  # Flatten front-to-back
+                    z = radius * np.sin(angle) * 0.4  # Flatten front-to-back
                     vertices.append([x, y, z])
             
             vertices = np.array(vertices, dtype=np.float32)
@@ -141,28 +146,33 @@ class GarmentReconstructionService:
 
         elif garment_type in ["pants", "shorts"]:
             # Create two cylindrical legs
+            # Use SMPL-compatible coordinates: Y-up, legs go downward from waist
             num_rings = 10
             num_points_per_ring = 12
-            
+
+            # SMPL body: waist is around Y=0, legs extend down to Y=-0.8
+            leg_length = 0.7 if garment_type == "pants" else 0.3  # Shorts are shorter
+
             vertices = []
-            # Left leg
+            # Left leg (negative X)
             for ring in range(num_rings):
-                y = -0.8 * (ring / (num_rings - 1))
-                radius = 0.15 * (1 - 0.2 * (ring / num_rings))
+                # Y goes from waist (0) down to ankle (negative)
+                y = -leg_length * (ring / (num_rings - 1))
+                radius = 0.08 * (1 - 0.15 * (ring / num_rings))  # Taper toward ankle
                 for point in range(num_points_per_ring):
                     angle = 2 * np.pi * point / num_points_per_ring
-                    x = -0.2 + radius * np.cos(angle)
-                    z = radius * np.sin(angle) * 0.5
+                    x = -0.1 + radius * np.cos(angle)  # Left side
+                    z = radius * np.sin(angle) * 0.6
                     vertices.append([x, y, z])
-            
-            # Right leg
+
+            # Right leg (positive X)
             for ring in range(num_rings):
-                y = -0.8 * (ring / (num_rings - 1))
-                radius = 0.15 * (1 - 0.2 * (ring / num_rings))
+                y = -leg_length * (ring / (num_rings - 1))
+                radius = 0.08 * (1 - 0.15 * (ring / num_rings))
                 for point in range(num_points_per_ring):
                     angle = 2 * np.pi * point / num_points_per_ring
-                    x = 0.2 + radius * np.cos(angle)
-                    z = radius * np.sin(angle) * 0.5
+                    x = 0.1 + radius * np.cos(angle)  # Right side
+                    z = radius * np.sin(angle) * 0.6
                     vertices.append([x, y, z])
             
             vertices = np.array(vertices, dtype=np.float32)
@@ -183,14 +193,16 @@ class GarmentReconstructionService:
             faces = np.array(faces, dtype=np.uint32)
 
         elif garment_type in ["shoes", "boots", "socks"]:
-            # Simple foot-shaped mesh
+            # Simple foot-shaped mesh at ankle level
+            # SMPL feet are at approximately Y = -0.85
+            foot_y = -0.85
             vertices = np.array(
                 [
-                    [-0.1, -0.05, 0.0],  # Heel left
-                    [0.1, -0.05, 0.0],   # Heel right
-                    [-0.1, 0.15, 0.0],   # Toe left
-                    [0.1, 0.15, 0.0],    # Toe right
-                    [0.0, 0.0, 0.05],    # Top center
+                    [-0.05, foot_y, -0.08],      # Heel left
+                    [0.05, foot_y, -0.08],       # Heel right
+                    [-0.05, foot_y, 0.12],       # Toe left
+                    [0.05, foot_y, 0.12],        # Toe right
+                    [0.0, foot_y + 0.05, 0.0],   # Top center (ankle)
                 ],
                 dtype=np.float32,
             )
@@ -211,17 +223,19 @@ class GarmentReconstructionService:
                 width_estimate = 0.5
                 height_estimate = 0.8
 
-            # Simple plane with slight curve
+            # Simple plane with slight curve - SMPL-compatible Y-up
             num_x = 8
             num_y = 10
+            body_scale = 0.4  # Scale to body proportions
             vertices = []
             for y_idx in range(num_y):
-                y = -height_estimate * (y_idx / (num_y - 1))
+                # Y goes from top (positive) to bottom (zero)
+                y = body_scale * (1.0 - y_idx / (num_y - 1))
                 for x_idx in range(num_x):
-                    x = width_estimate * (x_idx / (num_x - 1) - 0.5)
-                    z = 0.05 * np.sin(x_idx * np.pi / num_x)  # Slight curve
+                    x = width_estimate * 0.3 * (x_idx / (num_x - 1) - 0.5)
+                    z = 0.03 * np.sin(x_idx * np.pi / num_x)  # Slight curve
                     vertices.append([x, y, z])
-            
+
             vertices = np.array(vertices, dtype=np.float32)
             
             # Create faces

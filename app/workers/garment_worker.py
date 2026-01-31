@@ -97,7 +97,7 @@ def process_garment(
             )
 
             # =================================================================
-            # MATERIAL PROPERTIES
+            # MATERIAL PROPERTIES & COLOR
             # =================================================================
             logger.info("Estimating material properties...")
 
@@ -105,6 +105,12 @@ def process_garment(
             material_properties = physics_service.estimate_material_properties(
                 extraction_result["garment_type"], image_data
             )
+
+            # Extract dominant color from garment texture
+            logger.info("Extracting dominant garment color...")
+            from app.services.skin_tone import extract_dominant_color
+            dominant_color = extract_dominant_color(extraction_result["texture"])
+            logger.info(f"Dominant color: RGB({dominant_color[0]:.2f}, {dominant_color[1]:.2f}, {dominant_color[2]:.2f})")
 
             # =================================================================
             # STORAGE UPLOAD
@@ -173,6 +179,7 @@ def process_garment(
             garment.texture_url = texture_url
             garment.material_properties = material_properties
             garment.key_points = extraction_result["key_points"]
+            garment.dominant_color = {"rgb": dominant_color}
             db.commit()
 
             logger.info(f"Garment {garment_id} processing completed successfully")

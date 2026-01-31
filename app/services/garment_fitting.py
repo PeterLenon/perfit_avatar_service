@@ -315,10 +315,11 @@ class GarmentFittingService:
         """
         Transform garment mesh to align with body.
 
-        Scales and positions the garment to match the target body region.
+        Garment meshes are now generated in SMPL-compatible coordinates,
+        so we primarily need to position them correctly on the body.
 
         Args:
-            garment_vertices: Garment mesh vertices
+            garment_vertices: Garment mesh vertices (SMPL-compatible coords)
             garment_type: Type of garment
             body_vertices: Avatar body vertices
             body_landmarks: Extracted body landmarks
@@ -333,97 +334,56 @@ class GarmentFittingService:
         garment_min = garment_vertices.min(axis=0)
         garment_max = garment_vertices.max(axis=0)
         garment_center = (garment_min + garment_max) / 2
-        garment_size = garment_max - garment_min
 
-        # Center garment at origin
-        centered_vertices = garment_vertices - garment_center
+        # Get body reference points
+        body_center = body_landmarks["body_center"]
 
-        # Determine target region on body
+        # Position garment based on type
         if region == "torso_upper":
-            target_center = body_landmarks.get(
-                "upper_body_center", body_landmarks["body_center"]
-            )
-            target_min = body_landmarks.get(
-                "upper_body_min", body_landmarks["body_min"]
-            )
-            target_max = body_landmarks.get(
-                "upper_body_max", body_landmarks["body_max"]
-            )
-        elif region in ["torso_full", "torso_lower"]:
-            target_center = body_landmarks["body_center"]
-            target_min = body_landmarks["body_min"]
-            target_max = body_landmarks["body_max"]
+            # Shirt: align center X/Z with body, position Y at shoulder level
+            if "shoulder_center" in body_landmarks:
+                shoulder = body_landmarks["shoulder_center"]
+                # Move garment so its top aligns with shoulders
+                garment_top_y = garment_max[1]
+                y_offset = shoulder[1] - garment_top_y + 0.02  # Slight below shoulders
+                offset = np.array([
+                    body_center[0] - garment_center[0],
+                    y_offset,
+                    body_center[2] - garment_center[2]
+                ])
+            else:
+                offset = body_center - garment_center
+                offset[1] = 0.1  # Position in upper body
+
         elif region in ["legs_full", "legs_upper"]:
-            target_center = body_landmarks.get(
-                "lower_body_center", body_landmarks["body_center"]
-            )
-            target_min = body_landmarks.get(
-                "lower_body_min", body_landmarks["body_min"]
-            )
-            target_max = body_landmarks.get(
-                "lower_body_max", body_landmarks["body_max"]
-            )
+            # Pants: align top with waist
+            if "waist_center" in body_landmarks:
+                waist = body_landmarks["waist_center"]
+                garment_top_y = garment_max[1]
+                y_offset = waist[1] - garment_top_y
+                offset = np.array([
+                    body_center[0] - garment_center[0],
+                    y_offset,
+                    body_center[2] - garment_center[2]
+                ])
+            else:
+                offset = body_center - garment_center
+                offset[1] = -0.3  # Position at lower body
+
         elif region == "feet":
-            # Position at bottom of body
-            target_center = body_landmarks["body_min"].copy()
-            target_center[1] += 0.05  # Slightly above ground
-            target_min = body_landmarks["body_min"]
-            target_max = body_landmarks["body_min"] + np.array([0.3, 0.15, 0.3])
-        elif region == "head":
-            target_center = body_landmarks.get("head_top", body_landmarks["body_max"])
-            target_min = target_center - np.array([0.15, 0.2, 0.15])
-            target_max = target_center + np.array([0.15, 0.1, 0.15])
-        elif region == "waist":
-            target_center = body_landmarks.get(
-                "waist_center", body_landmarks["body_center"]
-            )
-            target_min = target_center - np.array([0.2, 0.05, 0.15])
-            target_max = target_center + np.array([0.2, 0.05, 0.15])
+            # Shoes: position at feet
+            body_min_y = body_landmarks["body_min"][1]
+            offset = np.array([0, body_min_y - garment_min[1], 0])
+
         else:
-            target_center = body_landmarks["body_center"]
-            target_min = body_landmarks["body_min"]
-            target_max = body_landmarks["body_max"]
+            # Default: center on body
+            offset = body_center - garment_center
 
-        target_size = target_max - target_min
+        transformed = garment_vertices + offset
 
-        # Calculate scale factor (preserve aspect ratio, fit within target)
-        # Use slightly larger scale to ensure coverage
-        scale_factors = target_size / (garment_size + 1e-6)
-        scale = min(scale_factors) * 1.1  # 10% larger for overlap
-
-        # For garments, we want them slightly larger than the body
-        if region in ["torso_upper", "torso_full", "legs_full", "legs_upper"]:
-            scale *= 1.05  # Additional 5% for clothing room
-
-        # Apply scale
-        scaled_vertices = centered_vertices * scale
-
-        # Position at target location
-        # For upper body garments, align top with shoulders
-        if region == "torso_upper" and "shoulder_center" in body_landmarks:
-            # Align garment top with shoulder height
-            scaled_max_y = scaled_vertices[:, 1].max()
-            shoulder_y = body_landmarks["shoulder_center"][1]
-            y_offset = shoulder_y - scaled_max_y + 0.02  # Slight overlap
-            target_center = target_center.copy()
-            target_center[1] = 0  # Will use y_offset instead
-            transformed = scaled_vertices + target_center
-            transformed[:, 1] += y_offset
-        elif region in ["legs_full", "legs_upper"]:
-            # Align garment top with waist
-            scaled_max_y = scaled_vertices[:, 1].max()
-            waist_y = body_landmarks.get("waist_center", target_max)[1]
-            y_offset = waist_y - scaled_max_y
-            target_center = target_center.copy()
-            target_center[1] = 0
-            transformed = scaled_vertices + target_center
-            transformed[:, 1] += y_offset
-        else:
-            transformed = scaled_vertices + target_center
-
-        logger.debug(
-            f"Transformed {garment_type}: scale={scale:.3f}, "
-            f"target_center={target_center}"
+        logger.info(
+            f"Transformed {garment_type}: offset={offset}, "
+            f"garment_range=[{garment_min[1]:.2f}, {garment_max[1]:.2f}]"
         )
 
         return transformed
