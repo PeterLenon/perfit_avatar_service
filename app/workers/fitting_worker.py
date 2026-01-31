@@ -25,6 +25,21 @@ from app.services.mesh_loader import MeshLoaderService
 from app.services.storage import StorageService
 
 
+def _convert_to_native_types(obj):
+    """Convert numpy types to native Python types for JSON serialization."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: _convert_to_native_types(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_convert_to_native_types(item) for item in obj]
+    return obj
+
+
 def fit_garments_to_avatar(
     fitting_id: str,
     avatar_id: str,
@@ -210,14 +225,17 @@ def fit_garments_to_avatar(
                     .where(cast(FittedGarment.garment_ids, String) == json.dumps(garment_ids))
                 ).scalar_one_or_none()
 
+                # Build fitting parameters with native Python types for JSON serialization
+                fitting_params = _convert_to_native_types({
+                    "layering_order": fitting_result["layering_order"],
+                    **fitting_result["fitting_parameters"],
+                })
+
                 if existing:
                     # Update existing record
                     existing.fitted_mesh_url = fitted_mesh_url
                     existing.animated_glb_url = animated_glb_url
-                    existing.fitting_parameters = {
-                        "layering_order": fitting_result["layering_order"],
-                        **fitting_result["fitting_parameters"],
-                    }
+                    existing.fitting_parameters = fitting_params
                     logger.info(f"Updated existing fitted garment {existing.id}")
                 else:
                     # Create new record
@@ -227,10 +245,7 @@ def fit_garments_to_avatar(
                         garment_ids=garment_ids,
                         fitted_mesh_url=fitted_mesh_url,
                         animated_glb_url=animated_glb_url,
-                        fitting_parameters={
-                            "layering_order": fitting_result["layering_order"],
-                            **fitting_result["fitting_parameters"],
-                        },
+                        fitting_parameters=fitting_params,
                     )
                     db.add(fitted_garment)
                     logger.info(f"Created new fitted garment {fitting_id}")
