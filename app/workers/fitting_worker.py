@@ -8,12 +8,13 @@ Background job that fits garments onto avatars:
 4. Stores fitted result (optional caching)
 """
 
+import json
 import uuid
 from datetime import datetime
 
 import numpy as np
 from loguru import logger
-from sqlalchemy import create_engine, select
+from sqlalchemy import String, cast, create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.config import get_settings
@@ -202,10 +203,11 @@ def fit_garments_to_avatar(
 
             if should_cache:
                 # Check if already exists (same avatar + garments)
+                # Cast JSON to text for comparison since PostgreSQL JSON doesn't support =
                 existing = db.execute(
                     select(FittedGarment)
                     .where(FittedGarment.avatar_id == avatar.id)
-                    .where(FittedGarment.garment_ids == garment_ids)  # JSON comparison
+                    .where(cast(FittedGarment.garment_ids, String) == json.dumps(garment_ids))
                 ).scalar_one_or_none()
 
                 if existing:
