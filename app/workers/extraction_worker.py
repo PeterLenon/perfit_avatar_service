@@ -165,7 +165,9 @@ def extract_body_shape(
                 base_body_pose=smpl_output["body_pose"],
                 base_global_orient=smpl_output["global_orient"],
             )
-            glb_data = animation_service.create_animated_glb(poses, output_path=None)
+            glb_data = animation_service.create_animated_glb(
+                poses, output_path=None, body_color="medium"
+            )
             animated_glb_url = storage.upload_animated_glb(
                 user_id=user_id,
                 avatar_id=str(avatar_id),

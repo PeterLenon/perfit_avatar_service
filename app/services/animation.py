@@ -7,12 +7,20 @@ Creates multiple poses that simulate a person trying on clothes:
 - One arm up
 - Hands on hips
 - Turning slightly
+
+Supports textures for realistic rendering.
 """
 
 import base64
+import io
+import os
+import tempfile
+from typing import Any
+
 import numpy as np
 import torch
 from loguru import logger
+from PIL import Image
 from pygltflib import (
     GLTF2,
     Accessor,
@@ -26,7 +34,11 @@ from pygltflib import (
     Mesh,
     Node,
     Primitive,
-    Scene, BufferFormat,
+    Scene,
+    BufferFormat,
+    Image as GLTFImage,
+    Texture,
+    Sampler,
 )
 
 from app.config import get_settings
@@ -34,6 +46,15 @@ from app.config import get_settings
 
 class AnimationService:
     """Service for generating animated GLB files from SMPL parameters."""
+
+    # Default skin tones (RGB, 0-1 range)
+    SKIN_TONES = {
+        "light": [0.96, 0.87, 0.80],
+        "medium": [0.87, 0.72, 0.58],
+        "tan": [0.78, 0.60, 0.45],
+        "brown": [0.60, 0.42, 0.30],
+        "dark": [0.40, 0.28, 0.20],
+    }
 
     def __init__(self, smpl_model_path: str, gender: str):
         """
@@ -62,7 +83,9 @@ class AnimationService:
             )
         return self._smpl_model
 
-    def generate_poses(self, betas: np.ndarray, base_body_pose: np.ndarray, base_global_orient: np.ndarray) -> list[dict]:
+    def generate_poses(
+        self, betas: np.ndarray, base_body_pose: np.ndarray, base_global_orient: np.ndarray
+    ) -> list[dict]:
         """
         Generate multiple poses for animation.
 
@@ -72,7 +95,8 @@ class AnimationService:
             base_global_orient: Base global orientation (3,)
 
         Returns:
-            List of pose dictionaries with 'name', 'body_pose', 'global_orient', 'vertices', 'faces'
+            List of pose dictionaries with 'name', 'body_pose', 'global_orient',
+            'vertices', 'faces'
         """
         smpl_model = self._get_smpl_model()
         betas_tensor = torch.tensor(betas, dtype=torch.float32).unsqueeze(0)
@@ -101,13 +125,10 @@ class AnimationService:
 
         # 2. Arms up (like putting on a shirt)
         arms_up_body = torch.zeros(1, 23, 3)
-        # Left shoulder: raise arm up (rotation around x-axis, ~90 degrees)
-        arms_up_body[0, 16] = torch.tensor([np.radians(90), 0, 0])  # Left shoulder
-        # Right shoulder: raise arm up
-        arms_up_body[0, 17] = torch.tensor([np.radians(90), 0, 0])  # Right shoulder
-        # Elbows: slight bend
-        arms_up_body[0, 18] = torch.tensor([np.radians(-30), 0, 0])  # Left elbow
-        arms_up_body[0, 19] = torch.tensor([np.radians(-30), 0, 0])  # Right elbow
+        arms_up_body[0, 16] = torch.tensor([np.radians(90), 0, 0])
+        arms_up_body[0, 17] = torch.tensor([np.radians(90), 0, 0])
+        arms_up_body[0, 18] = torch.tensor([np.radians(-30), 0, 0])
+        arms_up_body[0, 19] = torch.tensor([np.radians(-30), 0, 0])
 
         with torch.no_grad():
             output = smpl_model(
@@ -126,8 +147,8 @@ class AnimationService:
 
         # 3. One arm up (left arm)
         one_arm_up_body = torch.zeros(1, 23, 3)
-        one_arm_up_body[0, 16] = torch.tensor([np.radians(90), 0, 0])  # Left shoulder
-        one_arm_up_body[0, 18] = torch.tensor([np.radians(-30), 0, 0])  # Left elbow
+        one_arm_up_body[0, 16] = torch.tensor([np.radians(90), 0, 0])
+        one_arm_up_body[0, 18] = torch.tensor([np.radians(-30), 0, 0])
 
         with torch.no_grad():
             output = smpl_model(
@@ -146,12 +167,10 @@ class AnimationService:
 
         # 4. Hands on hips
         hands_hips_body = torch.zeros(1, 23, 3)
-        # Shoulders: arms out to sides, then down
-        hands_hips_body[0, 16] = torch.tensor([np.radians(30), np.radians(45), 0])  # Left shoulder
-        hands_hips_body[0, 17] = torch.tensor([np.radians(30), np.radians(-45), 0])  # Right shoulder
-        # Elbows: bend back
-        hands_hips_body[0, 18] = torch.tensor([np.radians(-90), 0, 0])  # Left elbow
-        hands_hips_body[0, 19] = torch.tensor([np.radians(-90), 0, 0])  # Right elbow
+        hands_hips_body[0, 16] = torch.tensor([np.radians(30), np.radians(45), 0])
+        hands_hips_body[0, 17] = torch.tensor([np.radians(30), np.radians(-45), 0])
+        hands_hips_body[0, 18] = torch.tensor([np.radians(-90), 0, 0])
+        hands_hips_body[0, 19] = torch.tensor([np.radians(-90), 0, 0])
 
         with torch.no_grad():
             output = smpl_model(
@@ -185,7 +204,7 @@ class AnimationService:
         })
 
         # 6. Turned slightly (rotate body)
-        turn_global = torch.tensor([[[0, np.radians(30), 0]]], dtype=torch.float32)  # Rotate 30 degrees around Y
+        turn_global = torch.tensor([[[0, np.radians(30), 0]]], dtype=torch.float32)
         with torch.no_grad():
             output = smpl_model(
                 betas=betas_tensor,
@@ -204,57 +223,64 @@ class AnimationService:
         logger.info(f"Generated {len(poses)} poses for animation")
         return poses
 
-    def create_animated_glb(self, poses: list[dict], output_path: str) -> bytes:
+    def create_animated_glb(
+        self,
+        poses: list[dict],
+        output_path: str | None = None,
+        body_color: list[float] | str | None = None,
+        textures: list[dict[str, Any]] | None = None,
+    ) -> bytes:
         """
         Create an animated GLB file from multiple poses.
 
         Uses morph targets (shape keys) to animate between poses.
+        Supports textures for realistic rendering.
 
         Args:
             poses: List of pose dictionaries with 'vertices' and 'faces'
             output_path: Path to save the GLB file (or None to return bytes)
+            body_color: Body color as [R, G, B] (0-1) or skin tone name
+                       ('light', 'medium', 'tan', 'brown', 'dark')
+            textures: List of texture dicts with 'image' (PIL Image or bytes),
+                     'uvs' (Nx2 array), optional 'vertex_offset' for multi-mesh
 
         Returns:
             GLB file data as bytes
         """
-        import tempfile
-        import os
-
         if not poses:
             raise ValueError("At least one pose is required")
 
+        # Resolve body color
+        if body_color is None:
+            base_color = [0.87, 0.72, 0.58, 1.0]  # Default medium skin tone
+        elif isinstance(body_color, str):
+            rgb = self.SKIN_TONES.get(body_color, self.SKIN_TONES["medium"])
+            base_color = [*rgb, 1.0]
+        else:
+            base_color = [*body_color[:3], 1.0]
+
         # Use first pose as base mesh
-        base_vertices = poses[0]["vertices"]
-        base_faces = poses[0]["faces"]
+        base_vertices = poses[0]["vertices"].astype(np.float32)
+        base_faces = poses[0]["faces"].astype(np.uint32)
 
-        # Convert to float32 and ensure correct shape
-        base_vertices = base_vertices.astype(np.float32)
-        base_faces = base_faces.astype(np.uint32)
-
-        # Flatten vertices and faces for binary data
+        # Flatten for binary data
         vertices_flat = base_vertices.flatten()
         faces_flat = base_faces.flatten()
 
-        # Calculate sizes
-        vertex_buffer_size = len(vertices_flat) * 4  # float32 = 4 bytes
-        index_buffer_size = len(faces_flat) * 4  # uint32 = 4 bytes
+        # Buffer sizes
+        vertex_buffer_size = len(vertices_flat) * 4
+        index_buffer_size = len(faces_flat) * 4
 
-        # Create morph target data (differences from base)
+        # Create morph target data
         morph_targets_data = []
         for pose in poses[1:]:
             pose_vertices = pose["vertices"].astype(np.float32)
-            # Calculate difference from base (morph target delta)
             diff = pose_vertices - base_vertices
             morph_targets_data.append(diff.flatten().astype(np.float32))
 
-        # Total buffer size
-        total_buffer_size = vertex_buffer_size + index_buffer_size
-        if morph_targets_data:
-            total_buffer_size += sum(len(morph) * 4 for morph in morph_targets_data)
-
-        # Create binary data
+        # Build binary buffer
         binary_data = bytearray()
-        
+
         # Base vertices
         binary_data.extend(vertices_flat.tobytes())
         vertex_buffer_view_start = 0
@@ -275,7 +301,215 @@ class AnimationService:
                 "length": len(morph_data) * 4,
             })
 
-        # Create GLTF structure
+        # Process textures if provided
+        texture_data = []
+        uv_buffer_views = []
+        image_buffer_views = []
+        has_textures = textures is not None and len(textures) > 0
+
+        if has_textures:
+            for tex_info in textures:
+                # Get UV coordinates
+                uvs = tex_info.get("uvs")
+                if uvs is not None:
+                    uvs = np.array(uvs, dtype=np.float32)
+                    uv_start = len(binary_data)
+                    binary_data.extend(uvs.flatten().tobytes())
+                    uv_buffer_views.append({
+                        "start": uv_start,
+                        "length": len(uvs) * 2 * 4,  # Nx2 floats
+                        "count": len(uvs),
+                    })
+
+                # Get texture image
+                img = tex_info.get("image")
+                if img is not None:
+                    if isinstance(img, Image.Image):
+                        # Convert PIL Image to PNG bytes
+                        img_buffer = io.BytesIO()
+                        img.save(img_buffer, format="PNG")
+                        img_bytes = img_buffer.getvalue()
+                    elif isinstance(img, bytes):
+                        img_bytes = img
+                    else:
+                        continue
+
+                    img_start = len(binary_data)
+                    binary_data.extend(img_bytes)
+                    image_buffer_views.append({
+                        "start": img_start,
+                        "length": len(img_bytes),
+                    })
+                    texture_data.append(tex_info)
+
+        # Build GLTF structure
+        buffer_views = [
+            # Base vertices
+            BufferView(
+                buffer=0,
+                byteOffset=vertex_buffer_view_start,
+                byteLength=vertex_buffer_view_length,
+                target=34962,  # ARRAY_BUFFER
+            ),
+            # Indices
+            BufferView(
+                buffer=0,
+                byteOffset=index_buffer_view_start,
+                byteLength=index_buffer_view_length,
+                target=34963,  # ELEMENT_ARRAY_BUFFER
+            ),
+        ]
+
+        # Add morph target buffer views
+        for morph in morph_buffer_views:
+            buffer_views.append(
+                BufferView(
+                    buffer=0,
+                    byteOffset=morph["start"],
+                    byteLength=morph["length"],
+                    target=34962,
+                )
+            )
+
+        # Add UV buffer views
+        uv_accessor_start = 2 + len(morph_buffer_views)
+        for uv_bv in uv_buffer_views:
+            buffer_views.append(
+                BufferView(
+                    buffer=0,
+                    byteOffset=uv_bv["start"],
+                    byteLength=uv_bv["length"],
+                    target=34962,
+                )
+            )
+
+        # Add image buffer views (no target for images)
+        img_bv_start = len(buffer_views)
+        for img_bv in image_buffer_views:
+            buffer_views.append(
+                BufferView(
+                    buffer=0,
+                    byteOffset=img_bv["start"],
+                    byteLength=img_bv["length"],
+                )
+            )
+
+        # Build accessors
+        accessors = [
+            # Vertex positions
+            Accessor(
+                bufferView=0,
+                componentType=5126,  # FLOAT
+                count=len(base_vertices),
+                type="VEC3",
+                min=base_vertices.min(axis=0).tolist(),
+                max=base_vertices.max(axis=0).tolist(),
+            ),
+            # Indices
+            Accessor(
+                bufferView=1,
+                componentType=5125,  # UNSIGNED_INT
+                count=len(faces_flat),
+                type="SCALAR",
+            ),
+        ]
+
+        # Add morph target accessors
+        for i, morph_data in enumerate(morph_targets_data):
+            accessors.append(
+                Accessor(
+                    bufferView=i + 2,
+                    componentType=5126,
+                    count=len(base_vertices),
+                    type="VEC3",
+                    min=morph_data.reshape(-1, 3).min(axis=0).tolist(),
+                    max=morph_data.reshape(-1, 3).max(axis=0).tolist(),
+                )
+            )
+
+        # Add UV accessors
+        for i, uv_bv in enumerate(uv_buffer_views):
+            accessors.append(
+                Accessor(
+                    bufferView=uv_accessor_start + i,
+                    componentType=5126,
+                    count=uv_bv["count"],
+                    type="VEC2",
+                )
+            )
+
+        # Build images and textures for GLTF
+        gltf_images = []
+        gltf_textures = []
+        gltf_samplers = []
+
+        if has_textures and image_buffer_views:
+            # Add a sampler (linear filtering with repeat)
+            gltf_samplers.append(
+                Sampler(
+                    magFilter=9729,  # LINEAR
+                    minFilter=9987,  # LINEAR_MIPMAP_LINEAR
+                    wrapS=10497,  # REPEAT
+                    wrapT=10497,  # REPEAT
+                )
+            )
+
+            for i, img_bv in enumerate(image_buffer_views):
+                gltf_images.append(
+                    GLTFImage(
+                        bufferView=img_bv_start + i,
+                        mimeType="image/png",
+                    )
+                )
+                gltf_textures.append(
+                    Texture(
+                        sampler=0,
+                        source=i,
+                    )
+                )
+
+        # Build materials
+        materials = []
+        if has_textures and gltf_textures:
+            # Material with texture
+            materials.append(
+                Material(
+                    pbrMetallicRoughness={
+                        "baseColorTexture": {"index": 0},
+                        "metallicFactor": 0.0,
+                        "roughnessFactor": 0.7,
+                    },
+                    doubleSided=True,
+                )
+            )
+        else:
+            # Material with solid color
+            materials.append(
+                Material(
+                    pbrMetallicRoughness={
+                        "baseColorFactor": base_color,
+                        "metallicFactor": 0.0,
+                        "roughnessFactor": 0.5,
+                    },
+                    doubleSided=True,
+                )
+            )
+
+        # Build primitive attributes
+        primitive_attributes = {"POSITION": 0}
+        if uv_buffer_views:
+            # Add UV coordinates to primitive
+            primitive_attributes["TEXCOORD_0"] = uv_accessor_start
+
+        # Build mesh primitive
+        primitive = Primitive(
+            attributes=primitive_attributes,
+            indices=1,
+            material=0,
+            targets=[{"POSITION": i + 2} for i in range(len(morph_targets_data))],
+        )
+
+        # Create GLTF object
         gltf = GLTF2(
             asset=Asset(version="2.0", generator="Perfit Avatar Service"),
             scene=0,
@@ -283,239 +517,151 @@ class AnimationService:
             nodes=[Node(mesh=0)],
             meshes=[
                 Mesh(
-                    primitives=[
-                        Primitive(
-                            attributes={"POSITION": 0},
-                            indices=1,
-                            material=0,
-                            targets=[
-                                {
-                                    "POSITION": i + 2
-                                }
-                                for i in range(len(morph_targets_data))
-                            ],
-                        )
-                    ],
-                    weights=[0.0] * len(morph_targets_data),  # Start with all morphs at 0
+                    primitives=[primitive],
+                    weights=[0.0] * len(morph_targets_data),
                 )
             ],
-            accessors=[
-                # Vertex positions
-                Accessor(
-                    bufferView=0,
-                    componentType=5126,  # FLOAT
-                    count=len(base_vertices),
-                    type="VEC3",
-                    min=base_vertices.min(axis=0).tolist(),
-                    max=base_vertices.max(axis=0).tolist(),
-                ),
-                # Indices
-                Accessor(
-                    bufferView=1,
-                    componentType=5125,  # UNSIGNED_INT
-                    count=len(faces_flat),
-                    type="SCALAR",
-                ),
-                # Morph targets (deltas)
-                *[
-                    Accessor(
-                        bufferView=i + 2,
-                        componentType=5126,  # FLOAT
-                        count=len(base_vertices),
-                        type="VEC3",
-                        min=(morph_targets_data[i].reshape(-1, 3).min(axis=0)).tolist(),
-                        max=(morph_targets_data[i].reshape(-1, 3).max(axis=0)).tolist(),
-                    )
-                    for i in range(len(morph_targets_data))
-                ],
-            ],
-            bufferViews=[
-                # Base vertices
-                BufferView(
-                    buffer=0,
-                    byteOffset=vertex_buffer_view_start,
-                    byteLength=vertex_buffer_view_length,
-                    target=34962,  # ARRAY_BUFFER for vertex data
-                ),
-                # Indices
-                BufferView(
-                    buffer=0,
-                    byteOffset=index_buffer_view_start,
-                    byteLength=index_buffer_view_length,
-                    target=34963,  # ELEMENT_ARRAY_BUFFER for index data
-                ),
-                # Morph targets
-                *[
-                    BufferView(
-                        buffer=0,
-                        byteOffset=morph["start"],
-                        byteLength=morph["length"],
-                        target=34962,  # ARRAY_BUFFER for vertex data
-                    )
-                    for morph in morph_buffer_views
-                ],
-            ],
-            buffers=[
-                Buffer(
-                    byteLength=total_buffer_size,
-                    uri=None,  # Embedded in GLB
-                )
-            ],
-            materials=[
-                Material(
-                    pbrMetallicRoughness={
-                        "baseColorFactor": [0.8, 0.8, 0.8, 1.0],
-                        "metallicFactor": 0.0,
-                        "roughnessFactor": 0.5,
-                    }
-                )
-            ],
+            accessors=accessors,
+            bufferViews=buffer_views,
+            buffers=[Buffer(byteLength=len(binary_data))],
+            materials=materials,
+            images=gltf_images if gltf_images else None,
+            textures=gltf_textures if gltf_textures else None,
+            samplers=gltf_samplers if gltf_samplers else None,
         )
 
-        # Add animation (morph target weights)
+        # Add animation
         if len(poses) > 1:
-            # Create keyframe animation that cycles through poses
-            duration = len(poses) * 2.0  # 2 seconds per pose
-            num_frames = len(poses) * 20  # 20 frames per pose for smooth animation
-            times = np.linspace(0, duration, num_frames).astype(np.float32)
-            
-            # Create weight array: [num_frames, num_morph_targets]
-            weights = np.zeros((num_frames, len(morph_targets_data)), dtype=np.float32)
+            self._add_morph_animation(gltf, binary_data, poses, morph_targets_data)
 
-            for i, t in enumerate(times):
-                pose_time = t % (duration / len(poses) * len(poses))
-                pose_idx = int(pose_time / (duration / len(poses)))
-                
-                if pose_idx == 0:
-                    # Base pose - all weights at 0
-                    weights[i, :] = 0.0
-                elif pose_idx <= len(morph_targets_data):
-                    # Activate morph target for this pose
-                    morph_idx = pose_idx - 1
-                    # Fade in/out for smooth transitions
-                    cycle_pos = (pose_time % (duration / len(poses))) / (duration / len(poses))
-                    if cycle_pos < 0.2:
-                        # Fade in
-                        weights[i, morph_idx] = cycle_pos / 0.2
-                    elif cycle_pos < 0.8:
-                        # Hold
-                        weights[i, morph_idx] = 1.0
-                    else:
-                        # Fade out
-                        weights[i, morph_idx] = (1.0 - cycle_pos) / 0.2
+        # Convert to GLB
+        return self._save_as_glb(gltf, binary_data, output_path)
 
-            # Animation data
-            time_buffer_size = len(times) * 4
-            weight_buffer_size = len(weights.flatten()) * 4
-            animation_buffer_size = time_buffer_size + weight_buffer_size
+    def _add_morph_animation(
+        self,
+        gltf: GLTF2,
+        binary_data: bytearray,
+        poses: list[dict],
+        morph_targets_data: list[np.ndarray],
+    ) -> None:
+        """Add morph target animation to GLTF."""
+        duration = len(poses) * 2.0
+        num_frames = len(poses) * 20
+        times = np.linspace(0, duration, num_frames).astype(np.float32)
 
-            animation_binary = bytearray()
-            time_start = len(binary_data)
-            animation_binary.extend(times.tobytes())
-            weight_start = len(animation_binary)
-            animation_binary.extend(weights.flatten().tobytes())
+        weights = np.zeros((num_frames, len(morph_targets_data)), dtype=np.float32)
 
-            # Update total buffer size
-            total_buffer_size += animation_buffer_size
-            binary_data.extend(animation_binary)
+        for i, t in enumerate(times):
+            pose_time = t % (duration / len(poses) * len(poses))
+            pose_idx = int(pose_time / (duration / len(poses)))
 
-            # Add animation accessors and buffer views
-            time_accessor_idx = len(gltf.accessors)
-            weight_accessor_idx = time_accessor_idx + 1
+            if pose_idx == 0:
+                weights[i, :] = 0.0
+            elif pose_idx <= len(morph_targets_data):
+                morph_idx = pose_idx - 1
+                cycle_pos = (pose_time % (duration / len(poses))) / (duration / len(poses))
+                if cycle_pos < 0.2:
+                    weights[i, morph_idx] = cycle_pos / 0.2
+                elif cycle_pos < 0.8:
+                    weights[i, morph_idx] = 1.0
+                else:
+                    weights[i, morph_idx] = (1.0 - cycle_pos) / 0.2
 
-            gltf.accessors.extend([
-                Accessor(
-                    bufferView=len(gltf.bufferViews),
-                    componentType=5126,  # FLOAT
-                    count=len(times),
-                    type="SCALAR",
-                    min=[float(times.min())],
-                    max=[float(times.max())],
-                ),
-                Accessor(
-                    bufferView=len(gltf.bufferViews) + 1,
-                    componentType=5126,  # FLOAT
-                    count=len(weights.flatten()),  # Total number of weight values (frames * morph_targets)
-                    type="SCALAR",
-                ),
-            ])
+        # Add animation data to buffer
+        time_start = len(binary_data)
+        binary_data.extend(times.tobytes())
+        weight_start = len(binary_data)
+        binary_data.extend(weights.flatten().tobytes())
 
-            gltf.bufferViews.extend([
-                BufferView(
-                    buffer=0,
-                    byteOffset=time_start,
-                    byteLength=time_buffer_size,
-                ),
-                BufferView(
-                    buffer=0,
-                    byteOffset=time_start + weight_start,
-                    byteLength=weight_buffer_size,
-                ),
-            ])
+        time_buffer_size = len(times) * 4
+        weight_buffer_size = len(weights.flatten()) * 4
 
-            # Create animation
-            gltf.animations = [
-                Animation(
-                    samplers=[
-                        AnimationSampler(
-                            input=time_accessor_idx,
-                            output=weight_accessor_idx,
-                            interpolation="LINEAR",
-                        )
-                    ],
-                    channels=[
-                        AnimationChannel(
-                            sampler=0,
-                            target={
-                                "node": 0,
-                                "path": "weights",
-                            },
-                        )
-                    ],
-                )
-            ]
+        # Add buffer views
+        time_bv_idx = len(gltf.bufferViews)
+        gltf.bufferViews.append(
+            BufferView(buffer=0, byteOffset=time_start, byteLength=time_buffer_size)
+        )
+        weight_bv_idx = len(gltf.bufferViews)
+        gltf.bufferViews.append(
+            BufferView(buffer=0, byteOffset=weight_start, byteLength=weight_buffer_size)
+        )
 
-        # Update buffer size
+        # Add accessors
+        time_accessor_idx = len(gltf.accessors)
+        gltf.accessors.append(
+            Accessor(
+                bufferView=time_bv_idx,
+                componentType=5126,
+                count=len(times),
+                type="SCALAR",
+                min=[float(times.min())],
+                max=[float(times.max())],
+            )
+        )
+        weight_accessor_idx = len(gltf.accessors)
+        gltf.accessors.append(
+            Accessor(
+                bufferView=weight_bv_idx,
+                componentType=5126,
+                count=len(weights.flatten()),
+                type="SCALAR",
+            )
+        )
+
+        # Add animation
+        gltf.animations = [
+            Animation(
+                samplers=[
+                    AnimationSampler(
+                        input=time_accessor_idx,
+                        output=weight_accessor_idx,
+                        interpolation="LINEAR",
+                    )
+                ],
+                channels=[
+                    AnimationChannel(
+                        sampler=0,
+                        target={"node": 0, "path": "weights"},
+                    )
+                ],
+            )
+        ]
+
+    def _save_as_glb(
+        self, gltf: GLTF2, binary_data: bytearray, output_path: str | None
+    ) -> bytes:
+        """Save GLTF as GLB binary format."""
         buffer_data = bytes(binary_data)
         gltf.buffers[0].byteLength = len(buffer_data)
-        
-        # Set buffer data as data URI, then convert to GLB binary
-        # pygltflib needs buffer data to be accessible when converting
         gltf.buffers[0].uri = f"data:application/octet-stream;base64,{base64.b64encode(buffer_data).decode()}"
-        
-        # Save to temporary GLTF file first, then convert to GLB
+
         if output_path:
-            tmp_gltf = output_path.replace('.glb', '.gltf')
+            tmp_gltf = output_path.replace(".glb", ".gltf")
             tmp_glb = output_path
         else:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".gltf") as tmp:
                 tmp_gltf = tmp.name
-            tmp_glb = tmp_gltf.replace('.gltf', '.glb')
-        
+            tmp_glb = tmp_gltf.replace(".gltf", ".glb")
+
         try:
-            # Save as GLTF with data URI buffer
             gltf.save(tmp_gltf)
             gltf_loaded = GLTF2.load(tmp_gltf)
             gltf_loaded.convert_buffers(buffer_format=BufferFormat.DATAURI)
             gltf_loaded.save_binary(tmp_glb)
-            
-            # Clean up temporary GLTF file
+
             if os.path.exists(tmp_gltf):
                 os.unlink(tmp_gltf)
-            
-            # Read and return GLB data
+
             with open(tmp_glb, "rb") as f:
                 glb_data = f.read()
-            
+
             if not output_path:
-                # Clean up temporary GLB file if we created it
                 os.unlink(tmp_glb)
-            
-            logger.info(f"Created animated GLB with {len(poses)} poses")
+
+            logger.info(f"Created GLB file: {len(glb_data)} bytes")
             return glb_data
-            
+
         except Exception as e:
-            # Clean up on error
             if os.path.exists(tmp_gltf):
                 os.unlink(tmp_gltf)
             if not output_path and os.path.exists(tmp_glb):

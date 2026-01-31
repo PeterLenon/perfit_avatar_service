@@ -195,7 +195,9 @@ def fit_garments_to_avatar(
                     gender=avatar.gender,
                 )
                 
-                glb_data = animation_service.create_animated_glb(poses, output_path=None)
+                glb_data = animation_service.create_animated_glb(
+                    poses, output_path=None, body_color="medium"
+                )
                 
                 animated_glb_url = storage.upload_animated_glb(
                     user_id=avatar.user_id,
