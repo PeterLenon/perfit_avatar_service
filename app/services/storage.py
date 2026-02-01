@@ -50,6 +50,7 @@ class StorageService:
         user_id: str,
         avatar_id: str,
         params: dict[str, Any],
+        storage_type: str = "avatars",
     ) -> str:
         """
         Upload SMPL-X parameters as a compressed numpy archive.
@@ -59,11 +60,12 @@ class StorageService:
             avatar_id: Avatar identifier
             params: Dictionary containing SMPL-X parameters
                    (betas, body_pose, global_orient, etc.)
+            storage_type: Top-level folder (avatars, garments, fittings)
 
         Returns:
             URL to the uploaded file
         """
-        key = f"avatars/{user_id}/{avatar_id}/smplx_params.npz"
+        key = f"{storage_type}/{user_id}/{avatar_id}/smplx_params.npz"
 
         # Convert lists to numpy arrays and save to buffer
         buffer = io.BytesIO()
@@ -90,6 +92,7 @@ class StorageService:
         avatar_id: str,
         vertices: np.ndarray,
         faces: np.ndarray,
+        storage_type: str = "avatars",
     ) -> str:
         """
         Upload body mesh as an OBJ file.
@@ -99,11 +102,12 @@ class StorageService:
             avatar_id: Avatar identifier
             vertices: Nx3 array of vertex positions
             faces: Mx3 array of face indices
+            storage_type: Top-level folder (avatars, garments, fittings)
 
         Returns:
             URL to the uploaded file
         """
-        key = f"avatars/{user_id}/{avatar_id}/mesh.obj"
+        key = f"{storage_type}/{user_id}/{avatar_id}/mesh.obj"
 
         # Generate OBJ content
         obj_content = self._generate_obj(vertices, faces)
@@ -126,6 +130,8 @@ class StorageService:
         user_id: str,
         avatar_id: str,
         glb_data: bytes,
+        storage_type: str = "avatars",
+        filename: str = "avatar.glb",
     ) -> str:
         """
         Upload animated GLB file.
@@ -134,11 +140,13 @@ class StorageService:
             user_id: User identifier
             avatar_id: Avatar identifier
             glb_data: Binary GLB file data
+            storage_type: Top-level folder (avatars, garments, fittings)
+            filename: Name of the GLB file
 
         Returns:
             URL to the uploaded file
         """
-        key = f"avatars/{user_id}/{avatar_id}/avatar.glb"
+        key = f"{storage_type}/{user_id}/{avatar_id}/{filename}"
 
         try:
             self.client.put_object(
@@ -153,12 +161,52 @@ class StorageService:
             logger.error(f"Failed to upload animated GLB: {e}")
             raise
 
+    def upload_image(
+        self,
+        user_id: str,
+        item_id: str,
+        image_data: bytes,
+        content_type: str = "image/jpeg",
+        path_suffix: str = "source",
+        storage_type: str = "avatars",
+    ) -> str:
+        """
+        Upload an image file (generic method).
+
+        Args:
+            user_id: User identifier
+            item_id: Item identifier (avatar_id, garment_id, etc.)
+            image_data: Raw image bytes
+            content_type: MIME type of the image
+            path_suffix: Suffix for the storage path (source, segmented, texture, etc.)
+            storage_type: Top-level folder (avatars, garments, fittings)
+
+        Returns:
+            URL to the uploaded file
+        """
+        extension = content_type.split("/")[-1]
+        key = f"{storage_type}/{user_id}/{item_id}/{path_suffix}.{extension}"
+
+        try:
+            self.client.put_object(
+                Bucket=self.settings.bucket,
+                Key=key,
+                Body=image_data,
+                ContentType=content_type,
+            )
+            logger.info(f"Uploaded image to {key}")
+            return self._get_url(key)
+        except ClientError as e:
+            logger.error(f"Failed to upload image: {e}")
+            raise
+
     def upload_source_image(
         self,
         user_id: str,
         avatar_id: str,
         image_data: bytes,
         content_type: str = "image/jpeg",
+        storage_type: str = "avatars",
     ) -> str:
         """
         Upload the source image used for avatar creation.
@@ -168,12 +216,13 @@ class StorageService:
             avatar_id: Avatar identifier
             image_data: Raw image bytes
             content_type: MIME type of the image
+            storage_type: Top-level folder (avatars, garments, fittings)
 
         Returns:
             URL to the uploaded file
         """
         extension = content_type.split("/")[-1]
-        key = f"avatars/{user_id}/{avatar_id}/source.{extension}"
+        key = f"{storage_type}/{user_id}/{avatar_id}/source.{extension}"
 
         try:
             self.client.put_object(
@@ -208,6 +257,62 @@ class StorageService:
         except ClientError as e:
             logger.error(f"Failed to download SMPL-X params: {e}")
             raise
+
+    def download_mesh(self, url: str) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Download and parse OBJ mesh file.
+
+        Args:
+            url: URL to the .obj file
+
+        Returns:
+            Tuple of (vertices, faces) as numpy arrays
+        """
+        key = self._url_to_key(url)
+
+        try:
+            response = self.client.get_object(Bucket=self.settings.bucket, Key=key)
+            obj_content = response["Body"].read().decode("utf-8")
+            
+            vertices = []
+            faces = []
+            
+            for line in obj_content.split("\n"):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                
+                parts = line.split()
+                if not parts:
+                    continue
+                
+                if parts[0] == "v":
+                    # Vertex: v x y z
+                    vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                elif parts[0] == "f":
+                    # Face: f v1 v2 v3 (OBJ uses 1-indexed, convert to 0-indexed)
+                    face_verts = []
+                    for part in parts[1:]:
+                        # Handle format: f v1/vt1/vn1 v2/vt2/vn2 v3/vt3/vn3
+                        # or just: f v1 v2 v3
+                        vertex_idx = int(part.split("/")[0]) - 1  # Convert to 0-indexed
+                        face_verts.append(vertex_idx)
+                    if len(face_verts) >= 3:
+                        # Handle polygons by triangulating (simple: first 3 vertices)
+                        faces.append(face_verts[:3])
+            
+            vertices_array = np.array(vertices, dtype=np.float32)
+            faces_array = np.array(faces, dtype=np.uint32)
+            
+            logger.info(f"Loaded mesh: {len(vertices_array)} vertices, {len(faces_array)} faces")
+            return vertices_array, faces_array
+            
+        except ClientError as e:
+            logger.error(f"Failed to download mesh: {e}")
+            raise
+        except (ValueError, IndexError) as e:
+            logger.error(f"Failed to parse OBJ file: {e}")
+            raise ValueError(f"Invalid OBJ file format: {e}")
 
     def generate_presigned_url(self, key: str, expiration: int = 3600) -> str:
         """

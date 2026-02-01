@@ -16,7 +16,7 @@ class DatabaseSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="DB_")
 
-    host: str = "localhost"
+    host: str = "perfit-postgres"
     port: int = 5432
     user: str = "perfit"
     password: str = "perfit_dev"
@@ -38,7 +38,7 @@ class RedisSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="REDIS_")
 
-    host: str = "localhost"
+    host: str = "perfit-redis"
     port: int = 6379
     db: int = 0
     password: str | None = None
@@ -94,6 +94,25 @@ class MLSettings(BaseSettings):
     batch_size: int = 1
 
 
+class FittingRoomSettings(BaseSettings):
+    """Virtual fitting room configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="FITTING_ROOM_")
+
+    # Caching
+    cache_enabled: bool = Field(
+        default=True,
+        description="Enable caching of fitted results by default",
+    )
+
+    # Layering configuration file path (optional)
+    # If not provided, uses default layering order
+    layering_config_path: str | None = Field(
+        default=None,
+        description="Path to JSON file with custom layering order. If None, uses defaults.",
+    )
+
+
 class Settings(BaseSettings):
     """Root application settings."""
 
@@ -123,6 +142,7 @@ class Settings(BaseSettings):
     minio: MinioSettings = Field(default_factory=MinioSettings)
     image_validation: ImageValidationSettings = Field(default_factory=ImageValidationSettings)
     ml: MLSettings = Field(default_factory=MLSettings)
+    fitting_room: FittingRoomSettings = Field(default_factory=FittingRoomSettings)
 
 
 @lru_cache

@@ -123,6 +123,24 @@ def extract_body_shape(
             logger.info(f"Measurements extracted: height={measurements['height_cm']:.1f}cm")
 
             # =================================================================
+            # SKIN TONE EXTRACTION
+            # =================================================================
+            logger.info("Extracting skin tone from source image...")
+
+            from app.services.skin_tone import extract_skin_tone_from_mesh_projection
+
+            try:
+                skin_color = extract_skin_tone_from_mesh_projection(
+                    image=image,
+                    vertices=vertices,
+                )
+            except Exception as e:
+                logger.warning(f"Skin tone extraction failed: {e}, using default")
+                skin_color = [0.87, 0.72, 0.58]  # Default medium tone
+
+            logger.info(f"Skin color extracted: RGB({skin_color[0]:.2f}, {skin_color[1]:.2f}, {skin_color[2]:.2f})")
+
+            # =================================================================
             # STORAGE UPLOAD
             # =================================================================
             logger.info("Uploading to storage...")
@@ -165,7 +183,9 @@ def extract_body_shape(
                 base_body_pose=smpl_output["body_pose"],
                 base_global_orient=smpl_output["global_orient"],
             )
-            glb_data = animation_service.create_animated_glb(poses, output_path=None)
+            glb_data = animation_service.create_animated_glb(
+                poses, output_path=None, body_color=skin_color
+            )
             animated_glb_url = storage.upload_animated_glb(
                 user_id=user_id,
                 avatar_id=str(avatar_id),
@@ -195,6 +215,7 @@ def extract_body_shape(
                 smplx_betas={"values": smpl_betas},
                 smplx_body_pose={"values": smpl_body_pose},
                 smplx_global_orient={"values": smpl_global_orient},
+                skin_color={"rgb": skin_color},
                 height_cm=measurements["height_cm"],
                 chest_circumference_cm=measurements["chest_circumference_cm"],
                 waist_circumference_cm=measurements["waist_circumference_cm"],

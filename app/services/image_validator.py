@@ -46,12 +46,15 @@ class ImageValidator:
             )
         return self._face_detector
 
-    def validate_base64(self, image_base64: str) -> ImageValidationResult:
+    def validate_base64(
+        self, image_base64: str, require_face: bool = True
+    ) -> ImageValidationResult:
         """
         Validate a base64-encoded image.
 
         Args:
             image_base64: Base64-encoded image data (may include data URL prefix)
+            require_face: Whether to require face detection (True for avatars, False for garments)
 
         Returns:
             ImageValidationResult with validation status and any errors/warnings
@@ -138,17 +141,18 @@ class ImageValidator:
                 "Consider using a less bright photo."
             )
 
-        # Detect face
-        face_detection_result = self._detect_face(cv_image)
-        result.face_detected = face_detection_result["detected"]
-        result.face_confidence = face_detection_result.get("confidence")
+        # Detect face (only required for avatar images, not garments)
+        if require_face:
+            face_detection_result = self._detect_face(cv_image)
+            result.face_detected = face_detection_result["detected"]
+            result.face_confidence = face_detection_result.get("confidence")
 
-        if not result.face_detected:
-            result.is_valid = False
-            result.errors.append(
-                "No face detected in image. "
-                "Please upload a photo showing your full body with face visible."
-            )
+            if not result.face_detected:
+                result.is_valid = False
+                result.errors.append(
+                    "No face detected in image. "
+                    "Please upload a photo showing your full body with face visible."
+                )
 
         return result
 
